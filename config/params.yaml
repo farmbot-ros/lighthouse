@@ -1,0 +1,7 @@
+global:
+    ros__parameters:
+        topic_prefix: "/fb"
+
+gen_lines:
+    ros__parameters:
+        name: "gen_lines"
