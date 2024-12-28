@@ -27,6 +27,7 @@ install(
 )
 
 set(executables
+    beacon
 )
 
 find_package(ament_cmake REQUIRED)
