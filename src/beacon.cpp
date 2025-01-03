@@ -1,3 +1,5 @@
+#include <rclcpp/publisher.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <spdlog/spdlog.h>
 
@@ -6,6 +8,10 @@ namespace echo = spdlog;
 class Beacon {
     private:
         rclcpp::Node::SharedPtr node;
+        rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher;
+        // rcl
+
+
    public:
         Beacon(rclcpp::Node::SharedPtr node) : node(node) {
             echo::info("Beacon created");
