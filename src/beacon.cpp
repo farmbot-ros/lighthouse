@@ -10,7 +10,10 @@
 #include <iostream>
 #include <random>
 #include <sstream>
-// Cross-platform UUID generation (requires C++11 or later)
+
+using namespace std::chrono_literals;
+using namespace std::placeholders;
+
 std::string generate_uuid() {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -19,9 +22,7 @@ std::string generate_uuid() {
     for (int i = 0; i < 16; ++i) {
         uuid_bytes[i] = dis(gen);
     }
-    // Set the UUID version (version 4 - random)
     uuid_bytes[6] = (uuid_bytes[6] & 0x0f) | 0x40;
-    // Set the UUID variant (variant 1 - RFC 4122)
     uuid_bytes[8] = (uuid_bytes[8] & 0x3f) | 0x80;
     std::stringstream ss;
     for (int i = 0; i < 16; ++i) {
@@ -42,8 +43,10 @@ class BeaconNode : public rclcpp::Node {
     rclcpp::Publisher<farmbot_interfaces::msg::Beacons>::SharedPtr publisher_;
     rclcpp::Subscription<farmbot_interfaces::msg::Beacons>::SharedPtr subscription_;
 
+    // timer
+    rclcpp::TimerBase::SharedPtr timer_;
+
     // This node's own beacon.
-    farmbot_interfaces::msg::Beacon my_beacon_;
     std::string my_beacon_uuid_;
     std::string my_beacon_capability_;
 
@@ -53,40 +56,43 @@ class BeaconNode : public rclcpp::Node {
         publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacons>("beacons", 10);
         subscription_ = this->create_subscription<farmbot_interfaces::msg::Beacons>(
             "beacons", 10, std::bind(&BeaconNode::beaconCallback, this, std::placeholders::_1));
+        timer_ = this->create_wall_timer(100ms, std::bind(&BeaconNode::timerCallback, this));
 
         // capability parameter
         my_beacon_capability_ = this->declare_parameter("capability", "harvester");
         my_beacon_uuid_ = this->declare_parameter("uuid", generate_uuid());
 
         // Initialize this node's own beacon.
+        farmbot_interfaces::msg::Beacon my_beacon_;
         my_beacon_.uuid = my_beacon_uuid_;
         my_beacon_.capability = my_beacon_capability_;
 
         RCLCPP_INFO(this->get_logger(), "BeaconNode started with UUID: %s", my_beacon_.uuid.c_str());
+
+        stored_beacons_.push_back(my_beacon_);
     }
 
   private:
+    void timerCallback() {
+        auto msg = std::make_shared<farmbot_interfaces::msg::Beacons>();
+        // sort the beacons by uuid
+        std::sort(stored_beacons_.begin(), stored_beacons_.end(),
+                  [](const farmbot_interfaces::msg::Beacon &a, const farmbot_interfaces::msg::Beacon &b) {
+                      return a.uuid < b.uuid;
+                  });
+        msg->beacons = stored_beacons_;
+        publisher_->publish(*msg);
+    }
+
     void beaconCallback(const farmbot_interfaces::msg::Beacons::SharedPtr msg) {
-        // Store the incoming array internally.
-        stored_beacons_ = msg->beacons;
-
-        // Check if our beacon is already present.
-        bool found = false;
-        for (const auto &beacon : msg->beacons) {
-            if (beacon.uuid == my_beacon_.uuid) {
-                found = true;
-                break;
+        // Check for every beacon if it is in the stored array.
+        for (auto m_beacon : msg->beacons) {
+            for (auto s_beacon : stored_beacons_) {
+                if (s_beacon.uuid == m_beacon.uuid) {
+                    return;
+                }
             }
-        }
-
-        // If our beacon is not found, append it and publish the updated array.
-        if (!found) {
-            auto updated_msg = *msg; // Start with the received beacons array.
-            updated_msg.beacons.push_back(my_beacon_);
-            RCLCPP_INFO(this->get_logger(), "Beacon not found. Publishing updated beacons message.");
-            publisher_->publish(updated_msg);
-        } else {
-            RCLCPP_INFO(this->get_logger(), "My beacon already exists in the message. Ignoring update.");
+            stored_beacons_.push_back(m_beacon);
         }
     }
 };
