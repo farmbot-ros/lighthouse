@@ -29,6 +29,7 @@ def launch_setup(context, *args, **kwargs):
     color = LaunchConfiguration("color").perform(context)
     uuid = LaunchConfiguration("uuid").perform(context)
     offline = LaunchConfiguration("offline").perform(context)
+    priority = LaunchConfiguration("priority").perform(context)
 
     # convert offile string to seconds, the string can be in the format of "10s" or "10m" or "10h"
 
@@ -45,6 +46,7 @@ def launch_setup(context, *args, **kwargs):
             {"function": function} if function != "" else {},
             {"color": color} if color != "" else {},
             {"uuid": uuid} if uuid != "" else {},
+            {"priority": priority} if priority != "" else {},
         ],
     )
     nodes_array.append(capabilities)
@@ -71,6 +73,7 @@ def generate_launch_description():
     color = DeclareLaunchArgument("color", default_value="#ff0000")
     uuid = DeclareLaunchArgument("uuid", default_value=str(uuid4()))
     offline = DeclareLaunchArgument("offline", default_value="60s")
+    priority = DeclareLaunchArgument("priority", default_value="0")
 
     return LaunchDescription(
         [
@@ -79,6 +82,7 @@ def generate_launch_description():
             color,
             uuid,
             offline,
+            priority,
             OpaqueFunction(function=launch_setup),
         ]
     )
