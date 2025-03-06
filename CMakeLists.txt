@@ -27,6 +27,7 @@ install(
 )
 
 set(executables
+    capabilities
     beacon
 )
 

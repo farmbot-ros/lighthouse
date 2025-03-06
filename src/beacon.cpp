@@ -1,4 +1,3 @@
-#include "farmbot_interfaces/msg/beacon.hpp"
 #include "farmbot_interfaces/msg/beacons.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -14,66 +13,44 @@
 using namespace std::chrono_literals;
 using namespace std::placeholders;
 
-std::string generate_uuid() {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, 255);
-    std::array<unsigned char, 16> uuid_bytes;
-    for (int i = 0; i < 16; ++i) {
-        uuid_bytes[i] = dis(gen);
-    }
-    uuid_bytes[6] = (uuid_bytes[6] & 0x0f) | 0x40;
-    uuid_bytes[8] = (uuid_bytes[8] & 0x3f) | 0x80;
-    std::stringstream ss;
-    for (int i = 0; i < 16; ++i) {
-        if (i == 4 || i == 6 || i == 8 || i == 10) {
-            ss << "-";
-        }
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)uuid_bytes[i];
-    }
-    return ss.str();
-}
-
 class BeaconNode : public rclcpp::Node {
   private:
+    std::string namespace_;
+    bool got_self_beacon_ = false;
     // Internal storage for the received beacons array.
     std::vector<farmbot_interfaces::msg::Beacon> stored_beacons_;
+    farmbot_interfaces::msg::Beacon my_beacon_;
 
     // Publisher and Subscriber.
     rclcpp::Publisher<farmbot_interfaces::msg::Beacons>::SharedPtr publisher_;
-    rclcpp::Subscription<farmbot_interfaces::msg::Beacons>::SharedPtr subscription_;
+    rclcpp::Subscription<farmbot_interfaces::msg::Beacon>::SharedPtr single_beacon_sub;
+    rclcpp::Subscription<farmbot_interfaces::msg::Beacons>::SharedPtr all_beacons_sub;
 
     // timer
     rclcpp::TimerBase::SharedPtr timer_;
 
     // This node's own beacon.
-    std::string my_beacon_uuid_;
-    std::string my_beacon_capability_;
 
   public:
     BeaconNode() : Node("beacon_node") {
+        // Namespace
+        namespace_ = this->get_namespace();
+        if (!namespace_.empty() && namespace_[0] == '/') {
+            namespace_ = namespace_.substr(1);
+        }
         // Create a publisher and a subscriber on the same topic "beacons"
         publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacons>("beacons", 10);
-        subscription_ = this->create_subscription<farmbot_interfaces::msg::Beacons>(
-            "beacons", 10, std::bind(&BeaconNode::beaconCallback, this, std::placeholders::_1));
-        timer_ = this->create_wall_timer(100ms, std::bind(&BeaconNode::timerCallback, this));
+        all_beacons_sub = this->create_subscription<farmbot_interfaces::msg::Beacons>(
+            "/beacons", 10, std::bind(&BeaconNode::all_beacons_callback, this, _1));
+        single_beacon_sub = this->create_subscription<farmbot_interfaces::msg::Beacon>(
+            namespace_ + "/beacon", 10, std::bind(&BeaconNode::single_beacon_callback, this, _1));
+        timer_ = this->create_wall_timer(10s, std::bind(&BeaconNode::timer_callback, this));
 
-        // capability parameter
-        my_beacon_capability_ = this->declare_parameter("capability", "harvester");
-        my_beacon_uuid_ = this->declare_parameter("uuid", generate_uuid());
-
-        // Initialize this node's own beacon.
-        farmbot_interfaces::msg::Beacon my_beacon_;
-        my_beacon_.uuid = my_beacon_uuid_;
-        my_beacon_.capability = my_beacon_capability_;
-
-        RCLCPP_INFO(this->get_logger(), "BeaconNode started with UUID: %s", my_beacon_.uuid.c_str());
-
-        stored_beacons_.push_back(my_beacon_);
+        RCLCPP_INFO(this->get_logger(), "BeaconNode started");
     }
 
   private:
-    void timerCallback() {
+    void timer_callback() {
         auto msg = std::make_shared<farmbot_interfaces::msg::Beacons>();
         // sort the beacons by uuid
         std::sort(stored_beacons_.begin(), stored_beacons_.end(),
@@ -84,7 +61,15 @@ class BeaconNode : public rclcpp::Node {
         publisher_->publish(*msg);
     }
 
-    void beaconCallback(const farmbot_interfaces::msg::Beacons::SharedPtr msg) {
+    void single_beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
+        if (!got_self_beacon_) {
+            my_beacon_ = *msg;
+            stored_beacons_.push_back(my_beacon_);
+            got_self_beacon_ = true;
+        }
+    }
+
+    void all_beacons_callback(const farmbot_interfaces::msg::Beacons::SharedPtr msg) {
         // Check for every beacon if it is in the stored array.
         for (auto m_beacon : msg->beacons) {
             for (auto s_beacon : stored_beacons_) {
