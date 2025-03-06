@@ -39,11 +39,11 @@ class BeaconNode : public rclcpp::Node {
             namespace_ = namespace_.substr(1);
         }
         // Create a publisher and a subscriber on the same topic "beacons"
-        publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacons>("beacons", 10);
+        publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacons>("/beacons", 10);
         all_beacons_sub = this->create_subscription<farmbot_interfaces::msg::Beacons>(
             "/beacons", 10, std::bind(&BeaconNode::all_beacons_callback, this, _1));
         single_beacon_sub = this->create_subscription<farmbot_interfaces::msg::Beacon>(
-            namespace_ + "/beacon", 10, std::bind(&BeaconNode::single_beacon_callback, this, _1));
+            "beacon", 10, std::bind(&BeaconNode::single_beacon_callback, this, _1));
         timer_ = this->create_wall_timer(10s, std::bind(&BeaconNode::timer_callback, this));
 
         RCLCPP_INFO(this->get_logger(), "BeaconNode started");

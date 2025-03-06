@@ -2,6 +2,13 @@ global:
     ros__parameters:
         topic_prefix: "/fb"
 
-gen_lines:
+beacon:
     ros__parameters:
-        name: "gen_lines"
+        name: "beacon"
+
+capabilities:
+    ros__parameters:
+        name: "capabilities"
+        function: "harvester"
+        color: "#ff0000"
+        uuid: "00000000-0000-0000-0000-000000000000"
