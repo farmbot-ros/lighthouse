@@ -57,6 +57,11 @@ class BeaconNode : public rclcpp::Node {
                   [](const farmbot_interfaces::msg::Beacon &a, const farmbot_interfaces::msg::Beacon &b) {
                       return a.uuid < b.uuid;
                   });
+        // remove duplicates based on uuid
+        stored_beacons_.erase(std::unique(stored_beacons_.begin(), stored_beacons_.end(),
+                                          [](const farmbot_interfaces::msg::Beacon &a,
+                                             const farmbot_interfaces::msg::Beacon &b) { return a.uuid == b.uuid; }),
+                              stored_beacons_.end());
         msg->beacons = stored_beacons_;
         publisher_->publish(*msg);
     }
