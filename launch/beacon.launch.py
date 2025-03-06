@@ -2,11 +2,25 @@ import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 import yaml
+import re
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import LaunchConfiguration
 from launch.actions import OpaqueFunction
 from uuid import uuid4
+
+param_file = os.path.join(
+    get_package_share_directory("farmbot_lighthouse"), "config", "params.yaml"
+)
+
+
+def convert_to_seconds(time_str):
+    match = re.match(r"(\d+)([smh])", time_str)
+    if not match:
+        raise ValueError("Invalid time format. Use Xs, Xm, or Xh.")
+    value, unit = int(match.group(1)), match.group(2)
+    conversion = {"s": 1, "m": 60, "h": 3600}
+    return value * conversion[unit]
 
 
 def launch_setup(context, *args, **kwargs):
@@ -14,9 +28,9 @@ def launch_setup(context, *args, **kwargs):
     function = LaunchConfiguration("function").perform(context)
     color = LaunchConfiguration("color").perform(context)
     uuid = LaunchConfiguration("uuid").perform(context)
-    param_file = os.path.join(
-        get_package_share_directory("farmbot_lighthouse"), "config", "params.yaml"
-    )
+    offline = LaunchConfiguration("offline").perform(context)
+
+    # convert offile string to seconds, the string can be in the format of "10s" or "10m" or "10h"
 
     nodes_array = []
 
@@ -43,6 +57,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             yaml.safe_load(open(param_file))["beacon"]["ros__parameters"],
             yaml.safe_load(open(param_file))["global"]["ros__parameters"],
+            {"offline": convert_to_seconds(offline)},
         ],
     )
     nodes_array.append(beacon)
@@ -55,6 +70,7 @@ def generate_launch_description():
     function = DeclareLaunchArgument("function", default_value="harvester")
     color = DeclareLaunchArgument("color", default_value="#ff0000")
     uuid = DeclareLaunchArgument("uuid", default_value=str(uuid4()))
+    offline = DeclareLaunchArgument("offline", default_value="60s")
 
     return LaunchDescription(
         [
@@ -62,6 +78,7 @@ def generate_launch_description():
             function,
             color,
             uuid,
+            offline,
             OpaqueFunction(function=launch_setup),
         ]
     )

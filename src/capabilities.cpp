@@ -53,15 +53,15 @@ class BeaconNode : public rclcpp::Node {
         if (!namespace_.empty() && namespace_[0] == '/') {
             namespace_ = namespace_.substr(1);
         }
-        // Create a publisher and a subscriber on the same topic "beacons"
-        publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacon>("beacon", 10);
+
+        // Create a publisher and a subscriber on the same topic beacons/rci" (rci stands for "Robot Capabilitiy Index")
+        publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacon>("beacon/rci", 10);
         timer_ = this->create_wall_timer(3s, std::bind(&BeaconNode::timer_callback, this));
 
         // capability parameter
         my_beacon_function_ = this->declare_parameter("function", "harvester");
         my_beacon_uuid_ = this->declare_parameter("uuid", generate_uuid());
         my_beacon_color_ = this->declare_parameter("color", "#ff0000");
-
         // Initialize this node's own beacon.
         my_beacon_.uuid = my_beacon_uuid_;
         my_beacon_.function = my_beacon_function_;
@@ -72,7 +72,15 @@ class BeaconNode : public rclcpp::Node {
     }
 
   private:
-    void timer_callback() { publisher_->publish(my_beacon_); }
+    void timer_callback() {
+        // header
+        auto header = std::make_shared<std_msgs::msg::Header>();
+        header->stamp = this->now();
+        header->frame_id = "beacon";
+        my_beacon_.header = *header;
+
+        publisher_->publish(my_beacon_);
+    }
 };
 
 int main(int argc, char *argv[]) {

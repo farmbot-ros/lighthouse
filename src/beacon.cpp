@@ -1,6 +1,8 @@
 #include "farmbot_interfaces/msg/beacons.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+#include <rclcpp/parameter_value.hpp>
+#include <rclcpp/timer.hpp>
 #include <string>
 #include <vector>
 
@@ -16,7 +18,7 @@ using namespace std::placeholders;
 class BeaconNode : public rclcpp::Node {
   private:
     std::string namespace_;
-    bool got_self_beacon_ = false;
+    int timer_to_offline;
     // Internal storage for the received beacons array.
     std::vector<farmbot_interfaces::msg::Beacon> stored_beacons_;
     farmbot_interfaces::msg::Beacon my_beacon_;
@@ -28,6 +30,7 @@ class BeaconNode : public rclcpp::Node {
 
     // timer
     rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::TimerBase::SharedPtr offline_timer_;
 
     // This node's own beacon.
 
@@ -38,13 +41,18 @@ class BeaconNode : public rclcpp::Node {
         if (!namespace_.empty() && namespace_[0] == '/') {
             namespace_ = namespace_.substr(1);
         }
-        // Create a publisher and a subscriber on the same topic "beacons"
-        publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacons>("/beacons", 10);
+
+        this->declare_parameter("offline", rclcpp::PARAMETER_INTEGER);
+        timer_to_offline = this->get_parameter_or<int>("offline", 60);
+
+        // "beacons/rci" (rci stands for "Robot Capabilitiy Index")
+        publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacons>("/beacons/rci", 10);
         all_beacons_sub = this->create_subscription<farmbot_interfaces::msg::Beacons>(
-            "/beacons", 10, std::bind(&BeaconNode::all_beacons_callback, this, _1));
+            "/beacons/rci", 10, std::bind(&BeaconNode::all_beacons_callback, this, _1));
         single_beacon_sub = this->create_subscription<farmbot_interfaces::msg::Beacon>(
-            "beacon", 10, std::bind(&BeaconNode::single_beacon_callback, this, _1));
+            "beacon/rci", 10, std::bind(&BeaconNode::single_beacon_callback, this, _1));
         timer_ = this->create_wall_timer(10s, std::bind(&BeaconNode::timer_callback, this));
+        offline_timer_ = this->create_wall_timer(1s, std::bind(&BeaconNode::offline_timer_callback, this));
 
         RCLCPP_INFO(this->get_logger(), "BeaconNode started");
     }
@@ -67,22 +75,36 @@ class BeaconNode : public rclcpp::Node {
         publisher_->publish(*msg);
     }
 
+    void offline_timer_callback() {
+        auto time_now = this->now();
+        stored_beacons_.erase(std::remove_if(stored_beacons_.begin(), stored_beacons_.end(),
+                                             [&](const farmbot_interfaces::msg::Beacon &beacon) {
+                                                 return (time_now - beacon.header.stamp) >
+                                                        rclcpp::Duration::from_seconds(timer_to_offline);
+                                             }),
+                              stored_beacons_.end());
+    }
+
     void single_beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
-        if (!got_self_beacon_) {
-            my_beacon_ = *msg;
-            stored_beacons_.push_back(my_beacon_);
-            got_self_beacon_ = true;
-        }
+        // delete old message and add new message
+        stored_beacons_.erase(
+            std::remove_if(stored_beacons_.begin(), stored_beacons_.end(),
+                           [&](const farmbot_interfaces::msg::Beacon &beacon) { return (msg->uuid == beacon.uuid); }),
+            stored_beacons_.end());
+        stored_beacons_.push_back(*msg);
     }
 
     void all_beacons_callback(const farmbot_interfaces::msg::Beacons::SharedPtr msg) {
-        RCLCPP_INFO(this->get_logger(), "Number of beacons %zu", msg->beacons.size());
+        // RCLCPP_INFO(this->get_logger(), "Number of beacons %zu", msg->beacons.size());
         for (const auto &m_beacon : msg->beacons) {
             bool found = false;
             for (const auto &s_beacon : stored_beacons_) {
                 if (s_beacon.uuid == m_beacon.uuid) {
                     found = true;
                     break; // Beacon already exists, skip adding it.
+                } else if ((this->now() - m_beacon.header.stamp) > rclcpp::Duration::from_seconds(timer_to_offline)) {
+                    found = true;
+                    break; // Beacon is too old to add, it's just crawling around.
                 }
             }
             if (!found) {
