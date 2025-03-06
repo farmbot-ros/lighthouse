@@ -63,6 +63,7 @@ class BeaconNode : public rclcpp::Node {
                                              const farmbot_interfaces::msg::Beacon &b) { return a.uuid == b.uuid; }),
                               stored_beacons_.end());
         msg->beacons = stored_beacons_;
+        msg->sender = namespace_;
         publisher_->publish(*msg);
     }
 
@@ -75,14 +76,18 @@ class BeaconNode : public rclcpp::Node {
     }
 
     void all_beacons_callback(const farmbot_interfaces::msg::Beacons::SharedPtr msg) {
-        // Check for every beacon if it is in the stored array.
-        for (auto m_beacon : msg->beacons) {
-            for (auto s_beacon : stored_beacons_) {
+        RCLCPP_INFO(this->get_logger(), "Number of beacons %zu", msg->beacons.size());
+        for (const auto &m_beacon : msg->beacons) {
+            bool found = false;
+            for (const auto &s_beacon : stored_beacons_) {
                 if (s_beacon.uuid == m_beacon.uuid) {
-                    return;
+                    found = true;
+                    break; // Beacon already exists, skip adding it.
                 }
             }
-            stored_beacons_.push_back(m_beacon);
+            if (!found) {
+                stored_beacons_.push_back(m_beacon);
+            }
         }
     }
 };

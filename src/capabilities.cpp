@@ -55,7 +55,7 @@ class BeaconNode : public rclcpp::Node {
         }
         // Create a publisher and a subscriber on the same topic "beacons"
         publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacon>("beacon", 10);
-        timer_ = this->create_wall_timer(10s, std::bind(&BeaconNode::timer_callback, this));
+        timer_ = this->create_wall_timer(3s, std::bind(&BeaconNode::timer_callback, this));
 
         // capability parameter
         my_beacon_function_ = this->declare_parameter("function", "harvester");
