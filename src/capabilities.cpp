@@ -43,7 +43,7 @@ class BeaconNode : public rclcpp::Node {
     rclcpp::TimerBase::SharedPtr timer_;
     // This node's own beacon.
     std::string my_beacon_uuid_;
-    std::string my_beacon_capability_;
+    std::string my_beacon_function_;
 
   public:
     BeaconNode() : Node("beacon_node") {
@@ -57,12 +57,12 @@ class BeaconNode : public rclcpp::Node {
         timer_ = this->create_wall_timer(10s, std::bind(&BeaconNode::timer_callback, this));
 
         // capability parameter
-        my_beacon_capability_ = this->declare_parameter("capability", "harvester");
+        my_beacon_function_ = this->declare_parameter("capability", "harvester");
         my_beacon_uuid_ = this->declare_parameter("uuid", generate_uuid());
 
         // Initialize this node's own beacon.
         my_beacon_.uuid = my_beacon_uuid_;
-        my_beacon_.capability = my_beacon_capability_;
+        my_beacon_.function = my_beacon_function_;
         my_beacon_.name = namespace_;
 
         RCLCPP_INFO(this->get_logger(), "BeaconNode started with UUID: %s", my_beacon_.uuid.c_str());
