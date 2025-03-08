@@ -8,6 +8,7 @@
 #include <farmbot_interfaces/msg/beacon.hpp>
 #include <farmbot_interfaces/msg/chain.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
 
 using namespace std::chrono;
 using namespace std::placeholders;
@@ -17,15 +18,21 @@ class BlockyNode {
   private:
     rclcpp::Node::SharedPtr node_;
     std::string namespace_;
+    bool genesis_initialized_;
 
     chain::Chain chain_;
-    bool genesis_initialized_;
-    chain::OpenSSLPrivate privateKey_;
-    chain::OpenSSLPublic publicKey_;
+    std::shared_ptr<chain::OpenSSLPrivate> privateKey_;
+    std::shared_ptr<chain::OpenSSLPublic> publicKey_;
+    std::string public_key_file_;
+    std::string private_key_file_;
+    // chain::OpenSSLPrivate privateKey_;
+    // chain::OpenSSLPublic publicKey_;
 
     rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Beacon>::SharedPtr beacon_sub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
+
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr public_key_pub_;
 
     rclcpp::TimerBase::SharedPtr chain_publish_;
 
@@ -38,74 +45,93 @@ class BlockyNode {
             namespace_ = namespace_.substr(1);
         }
 
+        public_key_file_ = node_->get_parameter_or<std::string>("public_key_file", "public_key.pem");
+        private_key_file_ = node_->get_parameter_or<std::string>("private_key_file", "private_key.pem");
+
+        privateKey_ = std::make_shared<chain::OpenSSLPrivate>(private_key_file_);
+        publicKey_ = std::make_shared<chain::OpenSSLPublic>(public_key_file_);
+    }
+
+    void setup() {
         chain_pub_ = node_->create_publisher<farmbot_interfaces::msg::Chain>("/chain", 10);
-        beacon_sub_ = node_->create_subscription<farmbot_interfaces::msg::Beacon>(
-            "beacon/rci", 10, std::bind(&BlockyNode::beacon_callback, this, _1));
+        public_key_pub_ = node_->create_publisher<std_msgs::msg::String>("public_key", 10);
+
+        chain_publish_ = node_->create_wall_timer(1s, std::bind(&BlockyNode::chain_publish_timer_callback, this));
 
         RCLCPP_INFO(node_->get_logger(), "BeaconNode started");
     }
 
-    void beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
+    // void beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
+    //     if (!genesis_initialized_) {
+    //         chain_ = chain::Chain("1", msg->priority, msg->uuid, msg->function, privateKey_);
+    //         genesis_initialized_ = true;
+    //     }
+    // }
+
+    void chain_publish_timer_callback() {
         if (!genesis_initialized_) {
-            chain_ = chain::Chain(msg->priority, msg->uuid, msg->function, privateKey_);
+            chain_ = chain::Chain("1", 1, "0", "harvester", privateKey_);
             genesis_initialized_ = true;
+            return;
         }
+        chain_pub_->publish(chain_.toMsg());
     }
 };
 
-// int main(int argc, char *argv[]) {
-//     rclcpp::init(argc, argv);
-//     rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 4);
-//     rclcpp::NodeOptions options;
-//     options.allow_undeclared_parameters(true);
-//     options.automatically_declare_parameters_from_overrides(true);
-//
-//     rclcpp::Node::SharedPtr blocky_node = rclcpp::Node::make_shared("blocky_node", options);
-//     std::shared_ptr<BlockyNode> blocky = std::make_shared<BlockyNode>(blocky_node);
-//
-//     executor.add_node(blocky_node);
-//     executor.spin();
-//     rclcpp::shutdown();
-//     return 0;
-// }
+int main(int argc, char *argv[]) {
+    rclcpp::init(argc, argv);
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 4);
+    rclcpp::NodeOptions options;
+    options.allow_undeclared_parameters(true);
+    options.automatically_declare_parameters_from_overrides(true);
+
+    rclcpp::Node::SharedPtr blocky_node = rclcpp::Node::make_shared("blocky_node", options);
+    std::shared_ptr<BlockyNode> blocky = std::make_shared<BlockyNode>(blocky_node);
+    blocky->setup();
+
+    executor.add_node(blocky_node);
+    executor.spin();
+    rclcpp::shutdown();
+    return 0;
+}
 
 //-----------------------------------------------
 // Example usage:
-int main() {
-    try {
-        // Instantiate the private key operations (for signing and decryption).
-        chain::OpenSSLPrivate privateOps("private_key.pem");
-        // Instantiate the public key operations (for verification and encryption).
-        chain::OpenSSLPublic publicOps("public_key.pem");
-
-        // ----- Signing & Verification -----
-        std::string dataToSign = "This is the data to sign";
-        std::vector<unsigned char> signature = privateOps.sign(dataToSign);
-        std::cout << "Signature generated, length: " << signature.size() << "\n";
-        for (unsigned char byte : signature) {
-            printf("%02x", byte);
-        }
-        printf("\n");
-
-        bool valid = publicOps.verify(dataToSign, signature);
-        std::cout << (valid ? "Signature verified successfully." : "Signature verification failed.") << "\n";
-
-        // ----- Encryption & Decryption -----
-        std::string message = "Hello, World!";
-        // Encrypt the message using the public key.
-        std::vector<unsigned char> ciphertext = publicOps.encrypt(message);
-        std::cout << "Encryption complete, ciphertext length: " << ciphertext.size() << "\n";
-        for (unsigned char byte : ciphertext) {
-            printf("%02x", byte);
-        }
-        printf("\n");
-
-        // Decrypt the ciphertext using the private key.
-        std::string decryptedMessage = privateOps.decryptToString(ciphertext);
-        std::cout << "Decryption complete, plaintext: " << decryptedMessage << "\n";
-    } catch (const std::exception &ex) {
-        std::cerr << "Error: " << ex.what() << "\n";
-        return 1;
-    }
-    return 0;
-}
+// int main() {
+//     try {
+//         // Instantiate the private key operations (for signing and decryption).
+//         chain::OpenSSLPrivate privateOps("private_key.pem");
+//         // Instantiate the public key operations (for verification and encryption).
+//         chain::OpenSSLPublic publicOps("public_key.pem");
+//
+//         // ----- Signing & Verification -----
+//         std::string dataToSign = "This is the data to sign";
+//         std::vector<unsigned char> signature = privateOps.sign(dataToSign);
+//         std::cout << "Signature generated, length: " << signature.size() << "\n";
+//         for (unsigned char byte : signature) {
+//             printf("%02x", byte);
+//         }
+//         printf("\n");
+//
+//         bool valid = publicOps.verify(dataToSign, signature);
+//         std::cout << (valid ? "Signature verified successfully." : "Signature verification failed.") << "\n";
+//
+//         // ----- Encryption & Decryption -----
+//         std::string message = "Hello, World!";
+//         // Encrypt the message using the public key.
+//         std::vector<unsigned char> ciphertext = publicOps.encrypt(message);
+//         std::cout << "Encryption complete, ciphertext length: " << ciphertext.size() << "\n";
+//         for (unsigned char byte : ciphertext) {
+//             printf("%02x", byte);
+//         }
+//         printf("\n");
+//
+//         // Decrypt the ciphertext using the private key.
+//         std::string decryptedMessage = privateOps.decryptToString(ciphertext);
+//         std::cout << "Decryption complete, plaintext: " << decryptedMessage << "\n";
+//     } catch (const std::exception &ex) {
+//         std::cerr << "Error: " << ex.what() << "\n";
+//         return 1;
+//     }
+//     return 0;
+// }

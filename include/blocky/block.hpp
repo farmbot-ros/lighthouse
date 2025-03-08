@@ -10,27 +10,31 @@
 
 namespace chain {
     class Block : public farmbot_interfaces::msg::Block {
-      private:
-        std::vector<Transaction> transactions_;
-
       public:
+        int64_t index_;
+        std::string previous_hash_;
+        std::string hash_;
+        std::vector<Transaction> transactions_;
+        int64_t nonce_;
+        builtin_interfaces::msg::Time timestamp_;
+
+        Block() = default;
+        Block(const farmbot_interfaces::msg::Block &msg) { fromMsg(msg); }
         Block(int64_t idx, std::string prev_hash, std::vector<Transaction> txns) {
-            index = idx;
-            previous_hash = prev_hash;
-            for (const auto &txn : txns) {
-                this->transactions.push_back(txn);
-                this->transactions_.push_back(txn);
-            }
-            nonce = 0;
-            timestamp.sec = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-            timestamp.nanosec = duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count() % 1000000000;
-            hash = calculateHash();
+            index_ = idx;
+            previous_hash_ = prev_hash;
+            transactions_ = txns;
+            nonce_ = 0;
+            timestamp_.sec = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+            timestamp_.nanosec =
+                duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count() % 1000000000;
+            hash_ = calculateHash();
         }
 
         // Method to calculate the hash of the block
         std::string calculateHash() const {
             std::stringstream ss;
-            ss << index << this->timestamp.sec << this->timestamp.nanosec << previous_hash << nonce;
+            ss << index_ << timestamp_.sec << timestamp_.nanosec << previous_hash_ << nonce_;
             for (const auto &txn : transactions_) {
                 ss << txn.toString();
             }
@@ -38,14 +42,40 @@ namespace chain {
         }
 
         bool isValid() const {
-            if (index < 0 || previous_hash.empty() || hash.empty()) {
+            if (index_ < 0 || previous_hash_.empty() || hash_.empty()) {
                 return false;
             }
             auto sec_now = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-            if (sec_now - timestamp.sec < 10) {
+            if (sec_now - timestamp_.sec < 10) {
                 return false;
             }
             return true;
+        }
+
+        farmbot_interfaces::msg::Block toMsg() const {
+            farmbot_interfaces::msg::Block msg;
+            msg.index = index_;
+            msg.previous_hash = previous_hash_;
+            msg.hash = hash_;
+            for (const auto &txn : transactions_) {
+                msg.transactions.push_back(txn.toMsg());
+            }
+            msg.nonce = nonce_;
+            msg.timestamp = timestamp_;
+            return msg;
+        }
+
+        void fromMsg(const farmbot_interfaces::msg::Block &msg) {
+            index_ = msg.index;
+            previous_hash_ = msg.previous_hash;
+            hash_ = msg.hash;
+            for (const auto &transaction : msg.transactions) {
+                Transaction txn;
+                txn.fromMsg(transaction);
+                transactions_.push_back(txn);
+            }
+            nonce_ = msg.nonce;
+            timestamp_ = msg.timestamp;
         }
 
       private:

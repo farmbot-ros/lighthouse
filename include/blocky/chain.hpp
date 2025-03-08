@@ -7,56 +7,76 @@
 namespace chain {
     class Chain : public farmbot_interfaces::msg::Chain {
       public:
+        std::string uuid_;
+        builtin_interfaces::msg::Time timestamp_;
         std::vector<Block> chain_;
-        int difficulty;
 
         Chain() = default;
-        // Constructor: Initialize the blockchain with the genesis block
-        Chain(int16_t priority, std::string uuid, std::string function, OpenSSLPrivate &privateKey) {
-            Transaction genesisTransaction(priority, uuid, function);
-            genesisTransaction.signTransaction(privateKey);
+        Chain(const farmbot_interfaces::msg::Chain &msg) { fromMsg(msg); }
+        Chain(std::string s_uuid, int16_t priority, std::string t_uuid, std::string function,
+              std::shared_ptr<chain::OpenSSLPrivate> privateKey_) {
+            Transaction genesisTransaction(priority, t_uuid, function);
+            genesisTransaction.signTransaction(privateKey_);
             Block genesisBlock(0, "0", {genesisTransaction});
-            chain.push_back(genesisBlock);
             chain_.push_back(genesisBlock);
+            uuid_ = s_uuid;
         }
 
-        Chain(const std::vector<Block> &chain) : chain_(chain) {
-            for (const auto &block : chain_) {
-                this->chain.push_back(block);
-            }
+        Chain(std::string s_uuid, int16_t priority, std::string t_uuid, std::string function) {
+            Transaction genesisTransaction(priority, t_uuid, function);
+            Block genesisBlock(0, "0", {genesisTransaction});
+            chain_.push_back(genesisBlock);
+            uuid_ = s_uuid;
         }
 
         // Method to add a new block to the blockchain
         void addBlock(const Block &newBlock) {
             Block blockToAdd = newBlock;
-            blockToAdd.previous_hash = this->chain.back().hash;
+            blockToAdd.previous_hash_ = chain_.back().hash_;
             if (!blockToAdd.isValid()) {
                 std::cout << "Invalid block attempted to be added to the blockchain" << std::endl;
                 return;
             }
-            chain.push_back(blockToAdd);
             chain_.push_back(blockToAdd);
         }
 
         // Method to validate the integrity of the blockchain
         bool isValid() const {
-            for (size_t i = 1; i < chain.size(); i++) {
-                // const farmbot_interfaces::msg::Block &currentBlock = chain[i];
-                const farmbot_interfaces::msg::Block &previousBlock = chain[i - 1];
+            for (size_t i = 1; i < chain_.size(); i++) {
                 const Block &currentBlock_ = chain_[i];
-                // const Block &previousBlock_ = chain_[i - 1];
+                const Block &previousBlock = chain_[i - 1];
 
                 // Check if the current block's hash is correct
-                if (currentBlock_.hash != currentBlock_.calculateHash()) {
+                if (currentBlock_.hash_ != currentBlock_.calculateHash()) {
                     return false;
                 }
 
                 // Check if the current block's previous hash matches the hash of the previous block
-                if (currentBlock_.previous_hash != previousBlock.hash) {
+                if (currentBlock_.previous_hash_ != previousBlock.hash_) {
                     return false;
                 }
             }
             return true;
+        }
+
+        farmbot_interfaces::msg::Chain toMsg() const {
+            farmbot_interfaces::msg::Chain msg;
+            msg.timestamp = timestamp_;
+            msg.uuid = uuid_;
+            for (const auto &block : chain_) {
+                msg.chain.push_back(block);
+            }
+            return msg;
+        }
+
+        void fromMsg(const farmbot_interfaces::msg::Chain &msg) {
+            timestamp_ = msg.timestamp;
+            uuid_ = msg.uuid;
+            for (const auto &block : msg.chain) {
+                Block blk;
+                blk.fromMsg(block);
+                chain_.push_back(blk);
+            }
         }
     };
 } // namespace chain
