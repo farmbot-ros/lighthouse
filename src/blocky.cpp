@@ -73,14 +73,19 @@ class BlockyNode {
             genesis_initialized_ = true;
         }
     }
-    void chain_callback(const farmbot_interfaces::msg::Chain::SharedPtr msg) { genesis_initialized_ = true; }
+    void chain_callback(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
+        if (!genesis_initialized_) {
+            chain_ = chain::Chain(*msg);
+            genesis_initialized_ = true;
+        }
+    }
 
     void chain_publish_timer_callback() {
-        // if (!genesis_initialized_) {
-        //     chain_ = chain::Chain("1", 1, "0", "harvester", privateKey_);
-        //     genesis_initialized_ = true;
-        //     return;
-        // }
+        if (!genesis_initialized_) {
+            //     chain_ = chain::Chain("1", 1, "0", "harvester", privateKey_);
+            //     genesis_initialized_ = true;
+            return;
+        }
         chain_pub_->publish(chain_.toMsg());
     }
 };
