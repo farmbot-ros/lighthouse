@@ -13,26 +13,6 @@
 using namespace std::chrono_literals;
 using namespace std::placeholders;
 
-std::string generate_uuid() {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, 255);
-    std::array<unsigned char, 16> uuid_bytes;
-    for (int i = 0; i < 16; ++i) {
-        uuid_bytes[i] = dis(gen);
-    }
-    uuid_bytes[6] = (uuid_bytes[6] & 0x0f) | 0x40;
-    uuid_bytes[8] = (uuid_bytes[8] & 0x3f) | 0x80;
-    std::stringstream ss;
-    for (int i = 0; i < 16; ++i) {
-        if (i == 4 || i == 6 || i == 8 || i == 10) {
-            ss << "-";
-        }
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)uuid_bytes[i];
-    }
-    return ss.str();
-}
-
 class BeaconNode : public rclcpp::Node {
   private:
     std::string namespace_;
@@ -47,7 +27,10 @@ class BeaconNode : public rclcpp::Node {
     std::string my_beacon_color_;
 
   public:
-    BeaconNode() : Node("beacon_node") {
+    BeaconNode()
+        : Node("beacon_node",
+               rclcpp::NodeOptions().allow_undeclared_parameters(true).automatically_declare_parameters_from_overrides(
+                   true)) {
         // Namespace
         namespace_ = this->get_namespace();
         if (!namespace_.empty() && namespace_[0] == '/') {
@@ -59,9 +42,11 @@ class BeaconNode : public rclcpp::Node {
         timer_ = this->create_wall_timer(3s, std::bind(&BeaconNode::timer_callback, this));
 
         // capability parameter
-        my_beacon_function_ = this->declare_parameter("function", "harvester");
-        my_beacon_uuid_ = this->declare_parameter("uuid", generate_uuid());
-        my_beacon_color_ = this->declare_parameter("color", "#ff0000");
+        my_beacon_function_ = this->get_parameter_or<std::string>("function", "harvester");
+        my_beacon_uuid_ = this->get_parameter_or<std::string>("uuid", "00000000-0000-0000-0000-000000000000");
+        my_beacon_color_ = this->get_parameter_or<std::string>("color", "#ff0000");
+        // my_beacon_uuid_ = this->declare_parameter("uuid", generate_uuid());
+        // my_beacon_color_ = this->declare_parameter("color", "#ff0000");
         // Initialize this node's own beacon.
         my_beacon_.uuid = my_beacon_uuid_;
         my_beacon_.function = my_beacon_function_;

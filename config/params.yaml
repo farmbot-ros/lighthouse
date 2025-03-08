@@ -6,6 +6,10 @@ beacon:
     ros__parameters:
         name: "beacon"
 
+blocky:
+    ros__parameters:
+        name: "blocky"
+
 capabilities:
     ros__parameters:
         name: "capabilities"
