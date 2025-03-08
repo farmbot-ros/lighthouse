@@ -12,8 +12,9 @@ namespace chain {
 
         Chain() = default;
         // Constructor: Initialize the blockchain with the genesis block
-        Chain(int16_t priority, std::string uuid, std::string function) {
+        Chain(int16_t priority, std::string uuid, std::string function, OpenSSLPrivate &privateKey) {
             Transaction genesisTransaction(priority, uuid, function);
+            genesisTransaction.signTransaction(privateKey);
             Block genesisBlock(0, "0", {genesisTransaction});
             chain.push_back(genesisBlock);
             chain_.push_back(genesisBlock);

@@ -9,6 +9,8 @@
 
 #include <chrono>
 
+#include "signer.hpp"
+
 using namespace std::chrono;
 
 namespace chain {
@@ -23,10 +25,7 @@ namespace chain {
                 duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count() % 1000000000;
         }
 
-        void signTransaction(const std::string &privateKey) {
-            // TODO: Implement actual cryptographic signing using privateKey
-            signature = "signed_with_" + privateKey;
-        }
+        void signTransaction(OpenSSLPrivate &privateKey) { signature = privateKey.sign(toString()); }
 
         // Method to verify the transaction signature
         bool isValid() const {
