@@ -29,6 +29,7 @@ install(
 set(executables
     capabilities
     beacon
+    blocky
 )
 
 find_package(ament_cmake REQUIRED)

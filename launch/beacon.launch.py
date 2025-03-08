@@ -64,6 +64,18 @@ def launch_setup(context, *args, **kwargs):
     )
     nodes_array.append(beacon)
 
+    blocky = Node(
+        package="farmbot_lighthouse",
+        executable="blocky",
+        name="blocky",
+        namespace=namespace,
+        parameters=[
+            yaml.safe_load(open(param_file))["blocky"]["ros__parameters"],
+            yaml.safe_load(open(param_file))["global"]["ros__parameters"],
+        ],
+    )
+    nodes_array.append(blocky)
+
     return nodes_array
 
 
