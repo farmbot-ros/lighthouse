@@ -73,12 +73,10 @@ class BeaconNode : public rclcpp::Node {
 
   private:
     void timer_callback() {
-        // header
-        auto header = std::make_shared<std_msgs::msg::Header>();
-        header->stamp = this->now();
-        header->frame_id = "beacon";
-        my_beacon_.header = *header;
-
+        builtin_interfaces::msg::Time *timestamp = new builtin_interfaces::msg::Time();
+        timestamp->sec = this->now().seconds();
+        timestamp->nanosec = this->now().nanoseconds();
+        my_beacon_.timestamp = *timestamp;
         publisher_->publish(my_beacon_);
     }
 };

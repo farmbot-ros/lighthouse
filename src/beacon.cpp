@@ -72,6 +72,7 @@ class BeaconNode : public rclcpp::Node {
                               stored_beacons_.end());
         msg->beacons = stored_beacons_;
         msg->sender = namespace_;
+        msg->num_beacons = stored_beacons_.size();
         publisher_->publish(*msg);
     }
 
@@ -79,7 +80,7 @@ class BeaconNode : public rclcpp::Node {
         auto time_now = this->now();
         stored_beacons_.erase(std::remove_if(stored_beacons_.begin(), stored_beacons_.end(),
                                              [&](const farmbot_interfaces::msg::Beacon &beacon) {
-                                                 return (time_now - beacon.header.stamp) >
+                                                 return (time_now - beacon.timestamp) >
                                                         rclcpp::Duration::from_seconds(timer_to_offline);
                                              }),
                               stored_beacons_.end());
@@ -102,7 +103,7 @@ class BeaconNode : public rclcpp::Node {
                 if (s_beacon.uuid == m_beacon.uuid) {
                     found = true;
                     break; // Beacon already exists, skip adding it.
-                } else if ((this->now() - m_beacon.header.stamp) > rclcpp::Duration::from_seconds(timer_to_offline)) {
+                } else if ((this->now() - m_beacon.timestamp) > rclcpp::Duration::from_seconds(timer_to_offline)) {
                     found = true;
                     break; // Beacon is too old to add, it's just crawling around.
                 }
