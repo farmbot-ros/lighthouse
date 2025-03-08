@@ -64,7 +64,7 @@ namespace chain {
             msg.timestamp = timestamp_;
             msg.uuid = uuid_;
             for (const auto &block : chain_) {
-                msg.chain.push_back(block);
+                msg.chain.push_back(block.toMsg());
             }
             return msg;
         }

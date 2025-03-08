@@ -28,8 +28,9 @@ class BlockyNode {
     // chain::OpenSSLPrivate privateKey_;
     // chain::OpenSSLPublic publicKey_;
 
-    rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Beacon>::SharedPtr beacon_sub_;
+
+    rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
 
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr public_key_pub_;
@@ -56,24 +57,30 @@ class BlockyNode {
         chain_pub_ = node_->create_publisher<farmbot_interfaces::msg::Chain>("/chain", 10);
         public_key_pub_ = node_->create_publisher<std_msgs::msg::String>("public_key", 10);
 
+        beacon_sub_ = node_->create_subscription<farmbot_interfaces::msg::Beacon>(
+            "beacon/rci", 10, std::bind(&BlockyNode::beacon_callback, this, _1));
+        chain_sub_ = node_->create_subscription<farmbot_interfaces::msg::Chain>(
+            "/chain", 10, std::bind(&BlockyNode::chain_callback, this, _1));
+
         chain_publish_ = node_->create_wall_timer(1s, std::bind(&BlockyNode::chain_publish_timer_callback, this));
 
         RCLCPP_INFO(node_->get_logger(), "BeaconNode started");
     }
 
-    // void beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
-    //     if (!genesis_initialized_) {
-    //         chain_ = chain::Chain("1", msg->priority, msg->uuid, msg->function, privateKey_);
-    //         genesis_initialized_ = true;
-    //     }
-    // }
+    void beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
+        if (!genesis_initialized_) {
+            chain_ = chain::Chain(msg->name, msg->priority, msg->uuid, msg->function, privateKey_);
+            genesis_initialized_ = true;
+        }
+    }
+    void chain_callback(const farmbot_interfaces::msg::Chain::SharedPtr msg) { genesis_initialized_ = true; }
 
     void chain_publish_timer_callback() {
-        if (!genesis_initialized_) {
-            chain_ = chain::Chain("1", 1, "0", "harvester", privateKey_);
-            genesis_initialized_ = true;
-            return;
-        }
+        // if (!genesis_initialized_) {
+        //     chain_ = chain::Chain("1", 1, "0", "harvester", privateKey_);
+        //     genesis_initialized_ = true;
+        //     return;
+        // }
         chain_pub_->publish(chain_.toMsg());
     }
 };

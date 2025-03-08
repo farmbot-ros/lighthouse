@@ -1,14 +1,36 @@
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace chain {
+
+    // Function to read a PEM file and return its content as a string.
+    inline std::string pemToString(const std::string &filePath) {
+        std::ifstream file(filePath);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open file: " + filePath);
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        return buffer.str();
+    }
+
+    // Function to write a string (containing PEM data) back to a file.
+    inline void stringToPem(const std::string &pemString, const std::string &filePath) {
+        std::ofstream file(filePath);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open file: " + filePath);
+        }
+        file << pemString;
+    }
 
     //-------------------------------------------------
     // Class for operations using the private key.
@@ -16,17 +38,34 @@ namespace chain {
     //-------------------------------------------------
     class OpenSSLPrivate {
       public:
-        // Loads a private key from a PEM file.
+        // Default constructor.
         OpenSSLPrivate() = default;
-        OpenSSLPrivate(const std::string &privateKeyPath) {
-            FILE *keyFile = fopen(privateKeyPath.c_str(), "r");
-            if (!keyFile) {
-                throw std::runtime_error("Unable to open private key file: " + privateKeyPath);
-            }
-            pkey = PEM_read_PrivateKey(keyFile, nullptr, nullptr, nullptr);
-            fclose(keyFile);
-            if (!pkey) {
-                throw std::runtime_error("Unable to read private key from file: " + privateKeyPath);
+
+        // New constructor that loads a private key from a PEM string.
+        // Pass true for 'isPEMString' to indicate the input is a PEM-formatted string.
+        // or false to indicate the input is a file path.
+        OpenSSLPrivate(const std::string &pemData, bool isPEMString = false) {
+            if (isPEMString) {
+                BIO *bio = BIO_new_mem_buf(pemData.data(), static_cast<int>(pemData.size()));
+                if (!bio) {
+                    throw std::runtime_error("Unable to create BIO from PEM string");
+                }
+                pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+                BIO_free(bio);
+                if (!pkey) {
+                    throw std::runtime_error("Unable to load private key from PEM string");
+                }
+            } else {
+                // Fallback: treat pemData as a file path.
+                FILE *keyFile = fopen(pemData.c_str(), "r");
+                if (!keyFile) {
+                    throw std::runtime_error("Unable to open private key file: " + pemData);
+                }
+                pkey = PEM_read_PrivateKey(keyFile, nullptr, nullptr, nullptr);
+                fclose(keyFile);
+                if (!pkey) {
+                    throw std::runtime_error("Unable to read private key from file: " + pemData);
+                }
             }
         }
 
@@ -106,17 +145,33 @@ namespace chain {
     //-------------------------------------------------
     class OpenSSLPublic {
       public:
-        // Loads a public key from a PEM file.
+        // Default constructor.
         OpenSSLPublic() = default;
-        OpenSSLPublic(const std::string &publicKeyPath) {
-            FILE *keyFile = fopen(publicKeyPath.c_str(), "r");
-            if (!keyFile) {
-                throw std::runtime_error("Unable to open public key file: " + publicKeyPath);
-            }
-            pkey = PEM_read_PUBKEY(keyFile, nullptr, nullptr, nullptr);
-            fclose(keyFile);
-            if (!pkey) {
-                throw std::runtime_error("Unable to read public key from file: " + publicKeyPath);
+
+        // New constructor that loads a public key from a PEM string.
+        // Pass true for 'isPEMString' to indicate the input is a PEM-formatted string.
+        // or false to indicate the input is a file path.
+        OpenSSLPublic(const std::string &pemData, bool isPEMString = false) {
+            if (isPEMString) {
+                BIO *bio = BIO_new_mem_buf(pemData.data(), static_cast<int>(pemData.size()));
+                if (!bio) {
+                    throw std::runtime_error("Unable to create BIO from PEM string");
+                }
+                pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+                BIO_free(bio);
+                if (!pkey) {
+                    throw std::runtime_error("Unable to load public key from PEM string");
+                }
+            } else {
+                FILE *keyFile = fopen(pemData.c_str(), "r");
+                if (!keyFile) {
+                    throw std::runtime_error("Unable to open public key file: " + pemData);
+                }
+                pkey = PEM_read_PUBKEY(keyFile, nullptr, nullptr, nullptr);
+                fclose(keyFile);
+                if (!pkey) {
+                    throw std::runtime_error("Unable to read public key from file: " + pemData);
+                }
             }
         }
 
@@ -181,7 +236,7 @@ namespace chain {
     };
 
 } // namespace chain
-//
+
 // //-----------------------------------------------
 // // Example usage:
 // int main() {
