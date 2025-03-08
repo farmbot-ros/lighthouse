@@ -82,6 +82,7 @@ link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 find_package(nlohmann_json REQUIRED)
 find_package(GDAL REQUIRED)
+find_package(OpenSSL REQUIRED)
 #find curl
 
 
@@ -92,6 +93,7 @@ set(dependencies_sys
     ${Eigen_LIBRARIES}
     nlohmann_json::nlohmann_json
     GDAL::GDAL
+    OpenSSL::Crypto
 )
 
 foreach(executable ${executables})

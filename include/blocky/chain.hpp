@@ -10,6 +10,7 @@ namespace chain {
         std::vector<Block> chain_;
         int difficulty;
 
+        Chain() = default;
         // Constructor: Initialize the blockchain with the genesis block
         Chain(int16_t priority, std::string uuid, std::string function) {
             Transaction genesisTransaction(priority, uuid, function);
@@ -37,7 +38,7 @@ namespace chain {
         }
 
         // Method to validate the integrity of the blockchain
-        bool isChainValid() const {
+        bool isValid() const {
             for (size_t i = 1; i < chain.size(); i++) {
                 // const farmbot_interfaces::msg::Block &currentBlock = chain[i];
                 const farmbot_interfaces::msg::Block &previousBlock = chain[i - 1];

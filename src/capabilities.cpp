@@ -53,7 +53,7 @@ class BeaconNode : public rclcpp::Node {
         my_beacon_.name = namespace_;
         my_beacon_.color = my_beacon_color_;
 
-        RCLCPP_INFO(this->get_logger(), "BeaconNode started with UUID: %s", my_beacon_.uuid.c_str());
+        RCLCPP_INFO(this->get_logger(), "ROBOT with UUID: %s", my_beacon_.uuid.c_str());
     }
 
   private:

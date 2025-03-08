@@ -4,6 +4,10 @@
 #include <string>
 
 #include "blocky/chain.hpp"
+#include "blocky/signer.cpp"
+
+#include <farmbot_interfaces/msg/beacon.hpp>
+#include <farmbot_interfaces/msg/chain.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 using namespace std::chrono;
@@ -15,8 +19,37 @@ class BlockyNode {
     rclcpp::Node::SharedPtr node_;
     std::string namespace_;
 
+    chain::Chain chain_;
+    bool genesis_initialized_;
+
+    rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
+    rclcpp::Subscription<farmbot_interfaces::msg::Beacon>::SharedPtr beacon_sub_;
+    rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
+
+    rclcpp::TimerBase::SharedPtr chain_publish_;
+
   public:
-    BlockyNode(rclcpp::Node::SharedPtr node) : node_(node) { RCLCPP_INFO(node_->get_logger(), "BlockyNode started"); }
+    BlockyNode(rclcpp::Node::SharedPtr node) : node_(node) {
+        RCLCPP_INFO(node_->get_logger(), "BlockyNode started");
+        // Namespace
+        namespace_ = node_->get_namespace();
+        if (!namespace_.empty() && namespace_[0] == '/') {
+            namespace_ = namespace_.substr(1);
+        }
+
+        chain_pub_ = node_->create_publisher<farmbot_interfaces::msg::Chain>("/chain", 10);
+        beacon_sub_ = node_->create_subscription<farmbot_interfaces::msg::Beacon>(
+            "beacon/rci", 10, std::bind(&BlockyNode::beacon_callback, this, _1));
+
+        RCLCPP_INFO(node_->get_logger(), "BeaconNode started");
+    }
+
+    void beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
+        if (!genesis_initialized_) {
+            chain_ = chain::Chain(msg->priority, msg->uuid, msg->function);
+            genesis_initialized_ = true;
+        }
+    }
 };
 
 int main(int argc, char *argv[]) {
