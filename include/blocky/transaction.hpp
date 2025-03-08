@@ -1,28 +1,25 @@
 #include <ctime>
+#include <farmbot_interfaces/msg/detail/transaction__struct.hpp>
 #include <iostream>
 #include <sstream>
 #include <string>
+
+#include <farmbot_interfaces/msg/transaction.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 #include <chrono>
 
 using namespace std::chrono;
 
-class Transaction {
+class Transaction : public farmbot_interfaces::msg::Transaction {
   public:
-    int32_t sec;
-    int32_t nanossec;
-    int16_t priority;
-    std::string uuid;
-    std::string name;
-    std::string color;
-    std::string function;
-    std::string signature;
-
-    Transaction(int16_t priority, std::string uuid, std::string name, std::string color, std::string function)
-        : priority(priority), uuid(uuid), name(name), color(color), function(function) {
-        sec = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-        nanossec = duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count() % 1000000000;
-        signature = "";
+    Transaction(int16_t priority, std::string uuid, std::string function) {
+        this->priority = priority;
+        this->uuid = uuid;
+        this->function = function;
+        this->timestamp.sec = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+        this->timestamp.nanosec =
+            duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count() % 1000000000;
     }
 
     void signTransaction(const std::string &privateKey) {
@@ -41,7 +38,7 @@ class Transaction {
 
     std::string toString() const {
         std::stringstream ss;
-        ss << sec << nanossec << priority << uuid << name << color << function;
+        ss << this->timestamp.sec << this->timestamp.nanosec << priority << uuid << function;
         return ss.str();
     }
 };
