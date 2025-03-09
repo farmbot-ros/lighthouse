@@ -31,6 +31,14 @@ namespace chain {
         file << pemString;
     }
 
+    inline std::vector<unsigned char> stringToVector(const std::string &str) {
+        return std::vector<unsigned char>(str.begin(), str.end());
+    }
+
+    inline std::string vectorToString(const std::vector<unsigned char> &vec) {
+        return std::string(vec.begin(), vec.end());
+    }
+
     //-------------------------------------------------
     // Class for operations using the private key.
     // (Signing and Decryption)
@@ -199,6 +207,25 @@ namespace chain {
         return (ret == 1);
     }
 
+    inline bool verify(EVP_PKEY *pubkey, const std::string &data, const std::vector<unsigned char> &signature) {
+        EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+        if (!mdctx) {
+            throw std::runtime_error("Unable to create EVP_MD_CTX for verification");
+        }
+        if (EVP_DigestVerifyInit(mdctx, nullptr, EVP_sha256(), nullptr, pubkey) != 1) {
+            EVP_MD_CTX_free(mdctx);
+            throw std::runtime_error("EVP_DigestVerifyInit failed");
+        }
+        if (EVP_DigestVerifyUpdate(mdctx, data.c_str(), data.size()) != 1) {
+            EVP_MD_CTX_free(mdctx);
+            throw std::runtime_error("EVP_DigestVerifyUpdate failed");
+        }
+        int ret = EVP_DigestVerifyFinal(mdctx, signature.data(), signature.size());
+        EVP_MD_CTX_free(mdctx);
+        // Do not free(pubkey) here if the caller is managing its lifetime.
+        return (ret == 1);
+    }
+
     // Encrypts plaintext (as bytes) using the provided public key PEM string and returns ciphertext.
     inline std::vector<unsigned char> encrypt(const std::string &pemPublic,
                                               const std::vector<unsigned char> &plaintext) {
@@ -228,6 +255,31 @@ namespace chain {
         ciphertext.resize(outlen);
         EVP_PKEY_CTX_free(ctx);
         EVP_PKEY_free(pubkey);
+        return ciphertext;
+    }
+
+    inline std::vector<unsigned char> encrypt(EVP_PKEY *pubkey, const std::string &plaintextStr) {
+        EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pubkey, nullptr);
+        if (!ctx) {
+            throw std::runtime_error("Unable to create EVP_PKEY_CTX for encryption");
+        }
+        if (EVP_PKEY_encrypt_init(ctx) <= 0) {
+            EVP_PKEY_CTX_free(ctx);
+            throw std::runtime_error("EVP_PKEY_encrypt_init failed");
+        }
+        std::vector<unsigned char> plaintext(plaintextStr.begin(), plaintextStr.end());
+        size_t outlen = 0;
+        if (EVP_PKEY_encrypt(ctx, nullptr, &outlen, plaintext.data(), plaintext.size()) <= 0) {
+            EVP_PKEY_CTX_free(ctx);
+            throw std::runtime_error("EVP_PKEY_encrypt (get length) failed");
+        }
+        std::vector<unsigned char> ciphertext(outlen);
+        if (EVP_PKEY_encrypt(ctx, ciphertext.data(), &outlen, plaintext.data(), plaintext.size()) <= 0) {
+            EVP_PKEY_CTX_free(ctx);
+            throw std::runtime_error("EVP_PKEY_encrypt failed");
+        }
+        ciphertext.resize(outlen);
+        EVP_PKEY_CTX_free(ctx);
         return ciphertext;
     }
 

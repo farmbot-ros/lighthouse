@@ -130,12 +130,14 @@ class BlockyNode {
 
     void join_response(const std::shared_ptr<jc::Request> req, std::shared_ptr<jc::Response> res) {
         RCLCPP_INFO(node_->get_logger(), " -- Robot %s wants to join the chain", req->robot_uuid.c_str());
-        res->success = true;
-        chain_.addBlock(req->robot_uuid, "harvester", crypto_);
+        // std::string password_enc = req->encrypted_password;
+        // auto password = crypto_->decrypt(chain::stringToVector(password_enc));
+        // RCLCPP_INFO(node_->get_logger(), " -- Password: %s", chain::vectorToString(password).c_str());
 
+        chain_.addBlock(req->robot_uuid, "harvester", crypto_);
         RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
-        RCLCPP_INFO(node_->get_logger(), " -- Chain length became: %zu", chain_.chain_.size());
         res->chain = chain_.toMsg();
+        res->success = true;
     }
 
     void join_request(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
@@ -160,7 +162,10 @@ class BlockyNode {
 
         auto request = std::make_shared<jc::Request>();
         request->robot_uuid = namespace_;
-        request->encrypted_password = crypto_->getPublicHalf();
+        auto password = "password";
+        auto public_key = chain::loadPublicKeyFromPEM(target_key);
+        chain::encrypt(public_key, password);
+        request->encrypted_password = password;
         while (!target_permission_client_->wait_for_service(1s)) {
             if (!rclcpp::ok()) {
                 RCLCPP_ERROR(node_->get_logger(), " -- Join service not available, node shutting down");
