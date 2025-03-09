@@ -121,6 +121,8 @@ class BlockyNode {
             RCLCPP_INFO(node_->get_logger(), " *** [%s] Chain adopted from an existing /chain", namespace_.c_str());
             chain_ = chain::Chain(*msg);
             chain_initialized_ = true;
+            // for (const auto &block : chain_.chain_) {
+            // }
         }
         if (!in_chain_ && got_beacons_) {
             in_chain_ = true;
@@ -174,6 +176,15 @@ class BlockyNode {
             RCLCPP_INFO(node_->get_logger(), " -- Waiting for service to appear...");
         }
         auto result_future = target_permission_client_->async_send_request(request);
+        while (rclcpp::ok() && result_future.wait_for(1s) == std::future_status::timeout) {
+            RCLCPP_INFO(node_->get_logger(), "Waiting for response from GPS2ENU service...");
+        }
+        auto result = result_future.get();
+        if (result->success) {
+            chain_ = chain::Chain(result->chain);
+
+            RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
+        }
     }
 
   private:
