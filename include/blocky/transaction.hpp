@@ -45,13 +45,11 @@ namespace chain {
                 duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count() % 1000000000;
         }
 
-        void signTransaction(std::shared_ptr<chain::OpenSSLPrivate> privateKey_) {
-            signature_ = privateKey_->sign(toString());
-        }
+        void signTransaction(std::shared_ptr<chain::Crypto> privateKey_) { signature_ = privateKey_->sign(toString()); }
 
-        bool verifyTransaction(std::shared_ptr<chain::OpenSSLPublic> publicKey_) {
-            return publicKey_->verify(toString(), signature_);
-        }
+        // bool verifyTransaction(std::shared_ptr<chain::OpenSSLPublic> publicKey_) {
+        // return publicKey_->verify(toString(), signature_);
+        // }
 
         // Method to verify the transaction signature
         bool isValid() const {

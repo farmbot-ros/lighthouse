@@ -23,9 +23,7 @@ class BlockyNode {
     farmbot_interfaces::msg::Beacon beacon_;
 
     chain::Chain chain_;
-    std::shared_ptr<chain::OpenSSLPrivate> privateKey_;
-    std::shared_ptr<chain::OpenSSLPublic> publicKey_;
-    std::string public_key_file_;
+    std::shared_ptr<chain::Crypto> crypto_;
     std::string private_key_file_;
     bool chain_initialized_;
     bool is_genesis_;
@@ -47,12 +45,10 @@ class BlockyNode {
             namespace_ = namespace_.substr(1);
         }
 
-        public_key_file_ = node_->get_parameter_or<std::string>("public_key_file", "public_key.pem");
         private_key_file_ = node_->get_parameter_or<std::string>("private_key_file", "private_key.pem");
         chain_domain_ = node_->get_parameter_or<int32_t>("chain_domain", 987);
 
-        privateKey_ = std::make_shared<chain::OpenSSLPrivate>(private_key_file_);
-        publicKey_ = std::make_shared<chain::OpenSSLPublic>(public_key_file_);
+        crypto_ = std::make_shared<chain::Crypto>(private_key_file_);
     }
 
     void setup() {
@@ -72,7 +68,7 @@ class BlockyNode {
     void beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
         if (!chain_initialized_) {
             // genesis block
-            chain_ = chain::Chain(std::to_string(chain_domain_), msg->priority, msg->uuid, msg->function, privateKey_);
+            chain_ = chain::Chain(std::to_string(chain_domain_), msg->priority, msg->uuid, msg->function, crypto_);
             chain_initialized_ = true, is_genesis_ = true, in_chain_ = true;
         }
         beacon_ = *msg;
@@ -93,7 +89,7 @@ class BlockyNode {
             chain_pub_->publish(chain_.toMsg());
         }
         std_msgs::msg::String public_key_msg;
-        public_key_msg.data = publicKey_->toString();
+        public_key_msg.data = crypto_->getPublicHalf();
         public_key_pub_->publish(public_key_msg);
     }
 };

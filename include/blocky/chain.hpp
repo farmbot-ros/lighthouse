@@ -14,7 +14,7 @@ namespace chain {
         Chain() = default;
         Chain(const farmbot_interfaces::msg::Chain &msg) { fromMsg(msg); }
         Chain(std::string s_uuid, int16_t priority, std::string t_uuid, std::string function,
-              std::shared_ptr<chain::OpenSSLPrivate> privateKey_) {
+              std::shared_ptr<chain::Crypto> privateKey_) {
             Transaction genesisTransaction(priority, t_uuid, function);
             genesisTransaction.signTransaction(privateKey_);
             Block genesisBlock(0, "0", {genesisTransaction});
