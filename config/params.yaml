@@ -9,6 +9,7 @@ beacon:
 blocky:
     ros__parameters:
         name: "blocky"
+        private_key_file: "/doc/code/farmbot/src/lighthouse/config/private_key.pem"
 
 capabilities:
     ros__parameters:

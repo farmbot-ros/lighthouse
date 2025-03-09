@@ -34,6 +34,8 @@ class BlockyNode {
     std::string private_key_file_;
     bool chain_initialized_, in_chain_, got_beacons_, got_beacon_, got_target_key_;
 
+    rclcpp::CallbackGroup::SharedPtr client_group_, keysub_geoup_;
+
     rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr public_key_pub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
@@ -44,10 +46,9 @@ class BlockyNode {
 
     rclcpp::TimerBase::SharedPtr chain_publish_;
 
-    using jc = farmbot_interfaces::srv::JoinChain;
-    rclcpp::Service<jc>::SharedPtr join_service_;
-    rclcpp::Client<jc>::SharedPtr target_permission_client_;
-    rclcpp::CallbackGroup::SharedPtr client_group_, keysub_geoup_;
+    using JoinChain = farmbot_interfaces::srv::JoinChain;
+    rclcpp::Service<JoinChain>::SharedPtr join_service_;
+    rclcpp::Client<JoinChain>::SharedPtr target_permission_client_;
     rmw_qos_profile_t qos_profile;
     // rclcpp::Service<farmbot_interfaces::srv::LeaveChain>::SharedPtr leave_service_;
 
@@ -61,6 +62,7 @@ class BlockyNode {
         }
 
         private_key_file_ = node_->get_parameter_or<std::string>("private_key_file", "private_key.pem");
+        RCLCPP_INFO(node_->get_logger(), " *** Private key file: %s", private_key_file_.c_str());
         chain_domain_ = node_->get_parameter_or<int32_t>("chain_domain", 987);
 
         crypto_ = std::make_shared<chain::Crypto>(private_key_file_);
@@ -84,7 +86,8 @@ class BlockyNode {
 
         chain_publish_ = node_->create_wall_timer(1s, std::bind(&BlockyNode::chainPubT, this));
 
-        join_service_ = node_->create_service<jc>("join_chain", std::bind(&BlockyNode::join_response, this, _1, _2));
+        join_service_ =
+            node_->create_service<JoinChain>("join_chain", std::bind(&BlockyNode::join_response, this, _1, _2));
 
         RCLCPP_INFO(node_->get_logger(), "BeaconNode started");
     }
@@ -141,7 +144,7 @@ class BlockyNode {
         }
     }
 
-    void join_response(const std::shared_ptr<jc::Request> req, std::shared_ptr<jc::Response> res) {
+    void join_response(const std::shared_ptr<JoinChain::Request> req, std::shared_ptr<JoinChain::Response> res) {
         RCLCPP_INFO(node_->get_logger(), " -- Robot %s wants to join the chain", req->robot_uuid.c_str());
         std::string password_enc = req->encrypted_password;
         // TODO: check if the password is valid (something is going wrong here)
@@ -158,7 +161,7 @@ class BlockyNode {
         std::string whom_to_ask = getNameFromUUID(msg->chain[0].transactions[0].uuid);
         RCLCPP_INFO(node_->get_logger(), " *** Asking >>> %s <<< to join the chain", whom_to_ask.c_str());
         target_permission_client_ =
-            node_->create_client<jc>("/" + whom_to_ask + "/join_chain", qos_profile, client_group_);
+            node_->create_client<JoinChain>("/" + whom_to_ask + "/join_chain", qos_profile, client_group_);
         std::string target_key;
         target_key_sub_ = node_->create_subscription<std_msgs::msg::String>(
             "/" + whom_to_ask + "/public_key", 10,
@@ -172,9 +175,9 @@ class BlockyNode {
         while (!got_target_key_ && rclcpp::ok()) {
             rclcpp::sleep_for(100ms);
         }
-        RCLCPP_INFO(node_->get_logger(), " *** Got target public key %s", target_key.c_str());
+        RCLCPP_INFO(node_->get_logger(), " *** Got target public key \n\n%s", target_key.c_str());
 
-        auto request = std::make_shared<jc::Request>();
+        auto request = std::make_shared<JoinChain::Request>();
         request->robot_uuid = beacon_.uuid;
         auto password = "password";
         auto public_key = chain::loadPublicKeyFromPEM(target_key);
