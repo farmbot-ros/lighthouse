@@ -135,26 +135,6 @@ namespace chain {
             return std::string(plaintext.begin(), plaintext.end());
         }
 
-        // key to string
-        std::string toString() {
-            std::stringstream ss;
-            ss << pkey;
-            return ss.str();
-        }
-
-        // string to key
-        void fromString(const std::string &keyStr) {
-            BIO *bio = BIO_new_mem_buf(keyStr.data(), static_cast<int>(keyStr.size()));
-            if (!bio) {
-                throw std::runtime_error("Unable to create BIO from PEM string");
-            }
-            pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
-            BIO_free(bio);
-            if (!pkey) {
-                throw std::runtime_error("Unable to load private key from PEM string");
-            }
-        }
-
       private:
         EVP_PKEY *pkey = nullptr;
     };
@@ -253,9 +233,19 @@ namespace chain {
 
         // key to string
         std::string toString() {
-            std::stringstream ss;
-            ss << pkey;
-            return ss.str();
+            BIO *bio = BIO_new(BIO_s_mem());
+            if (!bio) {
+                throw std::runtime_error("Unable to create BIO");
+            }
+            if (PEM_write_bio_PUBKEY(bio, pkey) != 1) {
+                BIO_free(bio);
+                throw std::runtime_error("PEM_write_bio_PUBKEY failed");
+            }
+            BUF_MEM *buffer;
+            BIO_get_mem_ptr(bio, &buffer);
+            std::string pemString(buffer->data, buffer->length);
+            BIO_free(bio);
+            return pemString;
         }
 
         // string to key

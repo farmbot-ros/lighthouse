@@ -33,6 +33,7 @@ namespace chain {
         void addBlock(const Block &newBlock) {
             Block blockToAdd = newBlock;
             blockToAdd.previous_hash_ = chain_.back().hash_;
+            blockToAdd.index_ = chain_.back().index_ + 1;
             if (!blockToAdd.isValid()) {
                 std::cout << "Invalid block attempted to be added to the blockchain" << std::endl;
                 return;
@@ -42,6 +43,12 @@ namespace chain {
 
         // Method to validate the integrity of the blockchain
         bool isValid() const {
+            if (chain_.empty()) {
+                return false;
+            }
+            if (chain_.size() == 1) {
+                return true;
+            }
             for (size_t i = 1; i < chain_.size(); i++) {
                 const Block &currentBlock_ = chain_[i];
                 const Block &previousBlock = chain_[i - 1];

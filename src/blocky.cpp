@@ -19,22 +19,22 @@ class BlockyNode {
     rclcpp::Node::SharedPtr node_;
     std::string namespace_;
     int32_t chain_domain_;
-    bool genesis_initialized_;
+
+    farmbot_interfaces::msg::Beacon beacon_;
 
     chain::Chain chain_;
     std::shared_ptr<chain::OpenSSLPrivate> privateKey_;
     std::shared_ptr<chain::OpenSSLPublic> publicKey_;
     std::string public_key_file_;
     std::string private_key_file_;
-    // chain::OpenSSLPrivate privateKey_;
-    // chain::OpenSSLPublic publicKey_;
-
-    rclcpp::Subscription<farmbot_interfaces::msg::Beacon>::SharedPtr beacon_sub_;
+    bool chain_initialized_;
+    bool is_genesis_;
+    bool in_chain_;
 
     rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
-    rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
-
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr public_key_pub_;
+    rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
+    rclcpp::Subscription<farmbot_interfaces::msg::Beacon>::SharedPtr beacon_sub_;
 
     rclcpp::TimerBase::SharedPtr chain_publish_;
 
@@ -70,28 +70,28 @@ class BlockyNode {
     }
 
     void beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
-        if (!genesis_initialized_) {
+        if (!chain_initialized_) {
+            // genesis block
             chain_ = chain::Chain(std::to_string(chain_domain_), msg->priority, msg->uuid, msg->function, privateKey_);
-            genesis_initialized_ = true;
+            chain_initialized_ = true, is_genesis_ = true, in_chain_ = true;
         }
+        beacon_ = *msg;
+        beacon_sub_.reset();
     }
     void chain_callback(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
         if (msg->uuid != std::to_string(chain_domain_)) {
             return;
         }
-        if (!genesis_initialized_) {
+        if (!chain_initialized_) {
             chain_ = chain::Chain(*msg);
-            genesis_initialized_ = true;
+            chain_initialized_ = true;
         }
     }
 
     void chain_publish_timer_callback() {
-        if (!genesis_initialized_) {
-            //     chain_ = chain::Chain("1", 1, "0", "harvester", privateKey_);
-            //     genesis_initialized_ = true;
-            return;
+        if (in_chain_) {
+            chain_pub_->publish(chain_.toMsg());
         }
-        chain_pub_->publish(chain_.toMsg());
         std_msgs::msg::String public_key_msg;
         public_key_msg.data = publicKey_->toString();
         public_key_pub_->publish(public_key_msg);

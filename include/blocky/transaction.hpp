@@ -49,6 +49,10 @@ namespace chain {
             signature_ = privateKey_->sign(toString());
         }
 
+        bool verifyTransaction(std::shared_ptr<chain::OpenSSLPublic> publicKey_) {
+            return publicKey_->verify(toString(), signature_);
+        }
+
         // Method to verify the transaction signature
         bool isValid() const {
             if (uuid_.empty() || function_.empty() || signature_.empty() || priority_ < 0 || priority_ > 255) {
