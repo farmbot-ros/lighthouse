@@ -77,6 +77,7 @@ def launch_setup(context, *args, **kwargs):
             yaml.safe_load(open(param_file))["global"]["ros__parameters"],
             {"chain_domain": chain_domain_int},
         ],
+        output="screen",
     )
     nodes_array.append(blocky)
 

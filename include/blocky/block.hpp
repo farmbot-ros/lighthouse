@@ -20,9 +20,9 @@ namespace chain {
 
         Block() = default;
         Block(const farmbot_interfaces::msg::Block &msg) { fromMsg(msg); }
-        Block(int64_t idx, std::string prev_hash, std::vector<Transaction> txns) {
-            index_ = idx;
-            previous_hash_ = prev_hash;
+        Block(std::vector<Transaction> txns) {
+            index_ = 0;
+            previous_hash_ = "GENESIS";
             transactions_ = txns;
             nonce_ = 0;
             timestamp_.sec = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
@@ -43,10 +43,8 @@ namespace chain {
 
         bool isValid() const {
             if (index_ < 0 || previous_hash_.empty() || hash_.empty()) {
-                return false;
-            }
-            auto sec_now = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-            if (sec_now - timestamp_.sec < 10) {
+                std::cout << "Index: " << index_ << " Hash: " << hash_ << "Previous hash: " << previous_hash_
+                          << std::endl;
                 return false;
             }
             return true;

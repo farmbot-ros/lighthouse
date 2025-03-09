@@ -17,14 +17,14 @@ namespace chain {
               std::shared_ptr<chain::Crypto> privateKey_) {
             Transaction genesisTransaction(priority, t_uuid, function);
             genesisTransaction.signTransaction(privateKey_);
-            Block genesisBlock(0, "0", {genesisTransaction});
+            Block genesisBlock({genesisTransaction});
             chain_.push_back(genesisBlock);
             uuid_ = s_uuid;
         }
 
         Chain(std::string s_uuid, int16_t priority, std::string t_uuid, std::string function) {
             Transaction genesisTransaction(priority, t_uuid, function);
-            Block genesisBlock(0, "0", {genesisTransaction});
+            Block genesisBlock({genesisTransaction});
             chain_.push_back(genesisBlock);
             uuid_ = s_uuid;
         }
@@ -38,6 +38,7 @@ namespace chain {
                 std::cout << "Invalid block attempted to be added to the blockchain" << std::endl;
                 return;
             }
+            std::cout << "Adding block to chain" << std::endl;
             chain_.push_back(blockToAdd);
         }
 
