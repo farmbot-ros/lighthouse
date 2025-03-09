@@ -32,7 +32,7 @@ class BlockyNode {
     chain::Chain chain_;
     std::shared_ptr<chain::Crypto> crypto_;
     std::string private_key_file_;
-    bool chain_initialized_, in_chain_, got_beacons_, got_target_key_;
+    bool chain_initialized_, in_chain_, got_beacons_, got_beacon_, got_target_key_;
 
     rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr public_key_pub_;
@@ -97,6 +97,7 @@ class BlockyNode {
             chain_initialized_ = true, in_chain_ = true;
         }
         beacon_ = *msg;
+        got_beacon_ = true;
         beacon_sub_.reset();
     }
     void chainPubT() {
@@ -121,10 +122,20 @@ class BlockyNode {
             RCLCPP_INFO(node_->get_logger(), " *** [%s] Chain adopted from an existing /chain", namespace_.c_str());
             chain_ = chain::Chain(*msg);
             chain_initialized_ = true;
-            // for (const auto &block : chain_.chain_) {
-            // }
         }
-        if (!in_chain_ && got_beacons_) {
+        if (!in_chain_ && got_beacons_ && got_beacon_) {
+            RCLCPP_INFO(node_->get_logger(), " R_UUID: %s", beacon_.uuid.c_str());
+            for (const auto &block : chain_.blocks_) {
+                for (const auto &transaction : block.transactions_) {
+                    RCLCPP_INFO(node_->get_logger(), " T_UUID: %s", transaction.uuid_.c_str());
+                    if (transaction.uuid_ == beacon_.uuid) {
+                        in_chain_ = true, chain_initialized_ = true;
+                        RCLCPP_INFO(node_->get_logger(), " *** [%s] I exist in the chain, thus not joining",
+                                    namespace_.c_str());
+                        return;
+                    }
+                }
+            }
             in_chain_ = true;
             join_request(msg);
         }
@@ -132,8 +143,9 @@ class BlockyNode {
 
     void join_response(const std::shared_ptr<jc::Request> req, std::shared_ptr<jc::Response> res) {
         RCLCPP_INFO(node_->get_logger(), " -- Robot %s wants to join the chain", req->robot_uuid.c_str());
-        // std::string password_enc = req->encrypted_password;
-        // auto password = crypto_->decrypt(chain::stringToVector(password_enc));
+        std::string password_enc = req->encrypted_password;
+        // TODO: check if the password is valid (something is going wrong here)
+        auto password = crypto_->decrypt(chain::stringToVector(password_enc));
         // RCLCPP_INFO(node_->get_logger(), " -- Password: %s", chain::vectorToString(password).c_str());
 
         chain_.addBlock(req->robot_uuid, "harvester", crypto_);
@@ -163,7 +175,7 @@ class BlockyNode {
         RCLCPP_INFO(node_->get_logger(), " *** Got target public key %s", target_key.c_str());
 
         auto request = std::make_shared<jc::Request>();
-        request->robot_uuid = namespace_;
+        request->robot_uuid = beacon_.uuid;
         auto password = "password";
         auto public_key = chain::loadPublicKeyFromPEM(target_key);
         chain::encrypt(public_key, password);
