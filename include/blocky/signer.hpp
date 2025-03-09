@@ -39,6 +39,64 @@ namespace chain {
         return std::string(vec.begin(), vec.end());
     }
 
+    inline std::string base64Encode(const std::vector<unsigned char> &data) {
+        BIO *bio, *b64;
+        BUF_MEM *bufferPtr;
+
+        // Create a Base64 filter BIO.
+        b64 = BIO_new(BIO_f_base64());
+        // Create a memory BIO.
+        bio = BIO_new(BIO_s_mem());
+        // Chain the Base64 BIO on top of the memory BIO.
+        bio = BIO_push(b64, bio);
+
+        // Optionally disable newlines in the output.
+        BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+
+        // Write the data into the BIO chain.
+        if (BIO_write(bio, data.data(), data.size()) <= 0) {
+            BIO_free_all(bio);
+            throw std::runtime_error("BIO_write failed during Base64 encoding");
+        }
+        if (BIO_flush(bio) != 1) {
+            BIO_free_all(bio);
+            throw std::runtime_error("BIO_flush failed during Base64 encoding");
+        }
+
+        // Get a pointer to the memory BIO's data.
+        BIO_get_mem_ptr(bio, &bufferPtr);
+        std::string encoded(bufferPtr->data, bufferPtr->length);
+
+        // Free all BIO resources.
+        BIO_free_all(bio);
+        return encoded;
+    }
+
+    inline std::vector<unsigned char> base64Decode(const std::string &encoded) {
+        BIO *bio, *b64;
+        // Create a memory BIO from the encoded string.
+        bio = BIO_new_mem_buf(encoded.data(), static_cast<int>(encoded.size()));
+        // Create a Base64 filter BIO.
+        b64 = BIO_new(BIO_f_base64());
+        // Chain the Base64 BIO on top of the memory BIO.
+        bio = BIO_push(b64, bio);
+
+        // Optionally disable newlines.
+        BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+
+        // Allocate a buffer for the decoded data.
+        std::vector<unsigned char> decoded(encoded.size());
+        int decodedLength = BIO_read(bio, decoded.data(), encoded.size());
+        if (decodedLength <= 0) {
+            BIO_free_all(bio);
+            throw std::runtime_error("BIO_read failed during Base64 decoding");
+        }
+        decoded.resize(decodedLength);
+
+        BIO_free_all(bio);
+        return decoded;
+    }
+
     //-------------------------------------------------
     // Class for operations using the private key.
     // (Signing and Decryption)
@@ -290,38 +348,3 @@ namespace chain {
     }
 
 } // namespace chain
-
-//-----------------------------------------------
-// Example usage:
-/*
-int main() {
-    try {
-        // Load the private key for signing and decryption.
-        chain::OpenSSLPrivate privateOps("private_key.pem");
-
-        // ----- Signing & Verification -----
-        std::string dataToSign = "This is the data to sign";
-        std::vector<unsigned char> signature = privateOps.sign(dataToSign);
-        std::cout << "Signature generated, length: " << signature.size() << "\n";
-
-        // For verification, retrieve the public key as PEM.
-        std::string publicPEM = privateOps.getPublicHalf();
-        bool valid = chain::verify(publicPEM, dataToSign, signature);
-        std::cout << (valid ? "Signature verified successfully." : "Signature verification failed.") << "\n";
-
-        // ----- Encryption & Decryption -----
-        std::string message = "Hello, World!";
-        // Encrypt the message using the provided public key PEM string.
-        std::vector<unsigned char> ciphertext = chain::encrypt(publicPEM, message);
-        std::cout << "Encryption complete, ciphertext length: " << ciphertext.size() << "\n";
-
-        // Decrypt the ciphertext using the private key.
-        std::string decryptedMessage = privateOps.decryptToString(ciphertext);
-        std::cout << "Decryption complete, plaintext: " << decryptedMessage << "\n";
-    } catch (const std::exception &ex) {
-        std::cerr << "Error: " << ex.what() << "\n";
-        return 1;
-    }
-    return 0;
-}
-*/

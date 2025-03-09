@@ -25,6 +25,7 @@ class BlockyNode {
     rclcpp::Node::SharedPtr node_;
     std::string namespace_;
     int32_t chain_domain_;
+    std::string password;
 
     farmbot_interfaces::msg::Beacon beacon_;
     farmbot_interfaces::msg::Beacons beacons_;
@@ -64,6 +65,7 @@ class BlockyNode {
         private_key_file_ = node_->get_parameter_or<std::string>("private_key_file", "private_key.pem");
         RCLCPP_INFO(node_->get_logger(), " *** Private key file: %s", private_key_file_.c_str());
         chain_domain_ = node_->get_parameter_or<int32_t>("chain_domain", 987);
+        password = node_->get_parameter_or<std::string>("password", "farmbot");
 
         crypto_ = std::make_shared<chain::Crypto>(private_key_file_);
 
@@ -120,13 +122,11 @@ class BlockyNode {
     void chainCallback(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
         if (msg->uuid != std::to_string(chain_domain_)) {
             return;
-        }
-        if (!chain_initialized_) {
+        } else if (!chain_initialized_) {
             RCLCPP_INFO(node_->get_logger(), " *** [%s] Chain adopted from an existing /chain", namespace_.c_str());
             chain_ = chain::Chain(*msg);
             chain_initialized_ = true;
-        }
-        if (!in_chain_ && got_beacons_ && got_beacon_) {
+        } else if (!in_chain_ && got_beacons_ && got_beacon_) {
             RCLCPP_INFO(node_->get_logger(), " R_UUID: %s", beacon_.uuid.c_str());
             for (const auto &block : chain_.blocks_) {
                 for (const auto &transaction : block.transactions_) {
@@ -136,28 +136,34 @@ class BlockyNode {
                         RCLCPP_INFO(node_->get_logger(), " *** [%s] I exist in the chain, thus not joining",
                                     namespace_.c_str());
                         return;
+                        in_chain_ = true;
                     }
                 }
             }
-            in_chain_ = true;
-            join_request(msg);
+            in_chain_ = join_request(msg);
         }
     }
 
     void join_response(const std::shared_ptr<JoinChain::Request> req, std::shared_ptr<JoinChain::Response> res) {
         RCLCPP_INFO(node_->get_logger(), " -- Robot %s wants to join the chain", req->robot_uuid.c_str());
+        /// ----------- Decrypt password -----------
         std::string password_enc = req->encrypted_password;
-        // TODO: check if the password is valid (something is going wrong here)
-        auto password = crypto_->decrypt(chain::stringToVector(password_enc));
-        // RCLCPP_INFO(node_->get_logger(), " -- Password: %s", chain::vectorToString(password).c_str());
-
+        std::vector<unsigned char> ciphertextBinary = chain::base64Decode(password_enc);
+        std::vector<unsigned char> decrypted = crypto_->decrypt(ciphertextBinary);
+        std::string password_str = chain::vectorToString(decrypted);
+        RCLCPP_INFO(node_->get_logger(), " -- Password: %s", password_str.c_str());
+        if (password_str != password) {
+            RCLCPP_WARN(node_->get_logger(), " -- Password is not valid");
+            res->success = false;
+            return;
+        }
         chain_.addBlock(req->robot_uuid, "harvester", crypto_);
         RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
         res->chain = chain_.toMsg();
         res->success = true;
     }
 
-    void join_request(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
+    bool join_request(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
         std::string whom_to_ask = getNameFromUUID(msg->chain[0].transactions[0].uuid);
         RCLCPP_INFO(node_->get_logger(), " *** Asking >>> %s <<< to join the chain", whom_to_ask.c_str());
         target_permission_client_ =
@@ -179,14 +185,17 @@ class BlockyNode {
 
         auto request = std::make_shared<JoinChain::Request>();
         request->robot_uuid = beacon_.uuid;
-        auto password = "password";
+
+        /// ----------- Encrypt password -----------
         auto public_key = chain::loadPublicKeyFromPEM(target_key);
-        chain::encrypt(public_key, password);
-        request->encrypted_password = password;
+        std::vector<unsigned char> ciphertext = chain::encrypt(public_key, password);
+        auto passwd_str = chain::base64Encode(ciphertext);
+        request->encrypted_password = passwd_str;
+
         while (!target_permission_client_->wait_for_service(1s)) {
             if (!rclcpp::ok()) {
                 RCLCPP_ERROR(node_->get_logger(), " -- Join service not available, node shutting down");
-                return;
+                return false;
             }
             RCLCPP_INFO(node_->get_logger(), " -- Waiting for service to appear...");
         }
@@ -195,11 +204,13 @@ class BlockyNode {
             RCLCPP_INFO(node_->get_logger(), "Waiting for response from GPS2ENU service...");
         }
         auto result = result_future.get();
-        if (result->success) {
-            chain_ = chain::Chain(result->chain);
-
-            RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
+        if (!result->success) {
+            RCLCPP_WARN(node_->get_logger(), " -- Join failed");
+            return false;
         }
+        RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
+        chain_ = chain::Chain(result->chain);
+        return true;
     }
 
   private:

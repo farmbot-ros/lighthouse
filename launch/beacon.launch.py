@@ -31,6 +31,8 @@ def launch_setup(context, *args, **kwargs):
     offline = LaunchConfiguration("offline").perform(context)
     priority = LaunchConfiguration("priority").perform(context)
     chain_domain = LaunchConfiguration("chain_domain").perform(context)
+    password = LaunchConfiguration("password").perform(context)
+    key_file = LaunchConfiguration("key_file").perform(context)
 
     # convert offile string to seconds, the string can be in the format of "10s" or "10m" or "10h"
 
@@ -76,6 +78,8 @@ def launch_setup(context, *args, **kwargs):
             yaml.safe_load(open(param_file))["blocky"]["ros__parameters"],
             yaml.safe_load(open(param_file))["global"]["ros__parameters"],
             {"chain_domain": chain_domain_int},
+            {"password": password} if password != "" else {},
+            {"private_key_file": key_file} if key_file != "" else {},
         ],
         output="screen",
     )
@@ -90,8 +94,10 @@ def generate_launch_description():
     color = DeclareLaunchArgument("color", default_value="#ff0000")
     uuid = DeclareLaunchArgument("uuid", default_value=str(uuid4()))
     offline = DeclareLaunchArgument("offline", default_value="60s")
-    priority = DeclareLaunchArgument("priority", default_value="0")
+    priority = DeclareLaunchArgument("priority", default_value="100")
     chain_domain = DeclareLaunchArgument("chain_domain", default_value="1")
+    password = DeclareLaunchArgument("password", default_value="")
+    key_file = DeclareLaunchArgument("key_file", default_value="")
 
     return LaunchDescription(
         [
@@ -102,6 +108,8 @@ def generate_launch_description():
             offline,
             priority,
             chain_domain,
+            password,
+            key_file,
             OpaqueFunction(function=launch_setup),
         ]
     )
