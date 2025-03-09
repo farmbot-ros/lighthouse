@@ -1,7 +1,10 @@
 #include <chrono>
 #include <farmbot_interfaces/msg/detail/beacons__struct.hpp>
 #include <iostream>
+#include <rclcpp/executors.hpp>
+#include <rclcpp/subscription_options.hpp>
 #include <sstream>
+#include <std_msgs/msg/detail/string__struct.hpp>
 #include <string>
 
 #include "blocky/chain.hpp"
@@ -29,22 +32,22 @@ class BlockyNode {
     chain::Chain chain_;
     std::shared_ptr<chain::Crypto> crypto_;
     std::string private_key_file_;
-    bool chain_initialized_;
-    bool got_beacons_;
-    bool in_chain_;
+    bool chain_initialized_, in_chain_, got_beacons_, got_target_key_;
 
     rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr public_key_pub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Beacon>::SharedPtr beacon_sub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Beacons>::SharedPtr beacons_sub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr target_key_sub_;
+    rclcpp::SubscriptionOptions sub_options;
 
     rclcpp::TimerBase::SharedPtr chain_publish_;
 
     using jc = farmbot_interfaces::srv::JoinChain;
     rclcpp::Service<jc>::SharedPtr join_service_;
-    rclcpp::Client<jc>::SharedPtr join_client_;
-    rclcpp::CallbackGroup::SharedPtr client_group_, service_group_;
+    rclcpp::Client<jc>::SharedPtr target_permission_client_;
+    rclcpp::CallbackGroup::SharedPtr client_group_, keysub_geoup_;
     rmw_qos_profile_t qos_profile;
     // rclcpp::Service<farmbot_interfaces::srv::LeaveChain>::SharedPtr leave_service_;
 
@@ -63,7 +66,8 @@ class BlockyNode {
         crypto_ = std::make_shared<chain::Crypto>(private_key_file_);
 
         client_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-        service_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+        keysub_geoup_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+        sub_options.callback_group = keysub_geoup_;
         qos_profile = rmw_qos_profile_services_default;
     }
 
@@ -80,9 +84,7 @@ class BlockyNode {
 
         chain_publish_ = node_->create_wall_timer(1s, std::bind(&BlockyNode::chainPubT, this));
 
-        join_service_ =
-            node_->create_service<jc>("join_chain", std::bind(&BlockyNode::join_service_callback, this, _1, _2));
-        // join_client_ = node_->create_client<jc>("join_chain", qos_profile, client_group_);
+        join_service_ = node_->create_service<jc>("join_chain", std::bind(&BlockyNode::join_response, this, _1, _2));
 
         RCLCPP_INFO(node_->get_logger(), "BeaconNode started");
     }
@@ -97,25 +99,6 @@ class BlockyNode {
         beacon_ = *msg;
         beacon_sub_.reset();
     }
-
-    void chainCallback(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
-        if (msg->uuid != std::to_string(chain_domain_)) {
-            return;
-        }
-        if (!chain_initialized_) {
-            RCLCPP_INFO(node_->get_logger(), " *** [%s] Chain adopted from an existing /chain", namespace_.c_str());
-            chain_ = chain::Chain(*msg);
-            chain_initialized_ = true;
-        }
-        if (!in_chain_ && got_beacons_) {
-            std::string whom_to_ask = getNameFromUUID(msg->chain[0].transactions[0].uuid);
-            RCLCPP_INFO(node_->get_logger(), " *** Asking >>> %s <<< to join the chain", whom_to_ask.c_str());
-            join_client_ = node_->create_client<jc>("/" + whom_to_ask + "/join_chain", qos_profile, client_group_);
-            request_join();
-            chain_sub_.reset();
-        }
-    }
-
     void chainPubT() {
         if (in_chain_) {
             chain_pub_->publish(chain_.toMsg());
@@ -130,7 +113,22 @@ class BlockyNode {
         got_beacons_ = true;
     }
 
-    void join_service_callback(const std::shared_ptr<jc::Request> req, std::shared_ptr<jc::Response> res) {
+    void chainCallback(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
+        if (msg->uuid != std::to_string(chain_domain_)) {
+            return;
+        }
+        if (!chain_initialized_) {
+            RCLCPP_INFO(node_->get_logger(), " *** [%s] Chain adopted from an existing /chain", namespace_.c_str());
+            chain_ = chain::Chain(*msg);
+            chain_initialized_ = true;
+        }
+        if (!in_chain_ && got_beacons_) {
+            in_chain_ = true;
+            join_request(msg);
+        }
+    }
+
+    void join_response(const std::shared_ptr<jc::Request> req, std::shared_ptr<jc::Response> res) {
         RCLCPP_INFO(node_->get_logger(), " -- Robot %s wants to join the chain", req->robot_uuid.c_str());
         res->success = true;
         chain_.addBlock(req->robot_uuid, "harvester", crypto_);
@@ -140,19 +138,37 @@ class BlockyNode {
         res->chain = chain_.toMsg();
     }
 
-    void request_join() {
-        RCLCPP_INFO(node_->get_logger(), " -- Requesting to join the chain");
+    void join_request(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
+        std::string whom_to_ask = getNameFromUUID(msg->chain[0].transactions[0].uuid);
+        RCLCPP_INFO(node_->get_logger(), " *** Asking >>> %s <<< to join the chain", whom_to_ask.c_str());
+        target_permission_client_ =
+            node_->create_client<jc>("/" + whom_to_ask + "/join_chain", qos_profile, client_group_);
+        std::string target_key;
+        target_key_sub_ = node_->create_subscription<std_msgs::msg::String>(
+            "/" + whom_to_ask + "/public_key", 10,
+            [&](const std_msgs::msg::String::SharedPtr msg) {
+                target_key = msg->data;
+                got_target_key_ = true;
+                target_key_sub_.reset();
+            },
+            sub_options);
+        RCLCPP_INFO(node_->get_logger(), " *** Waiting for target key");
+        while (!got_target_key_ && rclcpp::ok()) {
+            rclcpp::sleep_for(100ms);
+        }
+        RCLCPP_INFO(node_->get_logger(), " *** Got target public key %s", target_key.c_str());
+
         auto request = std::make_shared<jc::Request>();
         request->robot_uuid = namespace_;
         request->encrypted_password = crypto_->getPublicHalf();
-        while (!join_client_->wait_for_service(1s)) {
+        while (!target_permission_client_->wait_for_service(1s)) {
             if (!rclcpp::ok()) {
                 RCLCPP_ERROR(node_->get_logger(), " -- Join service not available, node shutting down");
                 return;
             }
             RCLCPP_INFO(node_->get_logger(), " -- Waiting for service to appear...");
         }
-        auto result_future = join_client_->async_send_request(request);
+        auto result_future = target_permission_client_->async_send_request(request);
     }
 
   private:
