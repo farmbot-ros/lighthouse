@@ -13,17 +13,17 @@ namespace chain {
 
         Chain() = default;
         Chain(const farmbot_interfaces::msg::Chain &msg) { fromMsg(msg); }
-        Chain(std::string s_uuid, int16_t priority, std::string t_uuid, std::string function,
-              std::shared_ptr<chain::Crypto> privateKey_) {
-            Transaction genesisTransaction(priority, t_uuid, function);
+        Chain(std::string s_uuid, std::string t_uuid, std::string function, std::shared_ptr<chain::Crypto> privateKey_,
+              int16_t priority = 100) {
+            Transaction genesisTransaction(t_uuid, function, priority);
             genesisTransaction.signTransaction(privateKey_);
             Block genesisBlock({genesisTransaction});
             chain_.push_back(genesisBlock);
             uuid_ = s_uuid;
         }
 
-        Chain(std::string s_uuid, int16_t priority, std::string t_uuid, std::string function) {
-            Transaction genesisTransaction(priority, t_uuid, function);
+        Chain(std::string s_uuid, std::string t_uuid, std::string function, int16_t priority = 100) {
+            Transaction genesisTransaction(t_uuid, function, priority);
             Block genesisBlock({genesisTransaction});
             chain_.push_back(genesisBlock);
             uuid_ = s_uuid;
@@ -40,6 +40,14 @@ namespace chain {
             }
             std::cout << "Adding block to chain" << std::endl;
             chain_.push_back(blockToAdd);
+        }
+
+        void addBlock(std::string uuid, std::string function, std::shared_ptr<chain::Crypto> privateKey_,
+                      int16_t priority = 100) {
+            Transaction genesisTransaction(uuid, function, priority);
+            genesisTransaction.signTransaction(privateKey_);
+            Block genesisBlock({genesisTransaction});
+            addBlock(genesisBlock);
         }
 
         // Method to validate the integrity of the blockchain

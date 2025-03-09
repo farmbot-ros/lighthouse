@@ -36,7 +36,7 @@ namespace chain {
 
         Transaction() = default;
         Transaction(const farmbot_interfaces::msg::Transaction &msg) { fromMsg(msg); }
-        Transaction(int16_t priority, std::string uuid, std::string function) {
+        Transaction(std::string uuid, std::string function, int16_t priority = 100) {
             priority_ = priority;
             uuid_ = uuid;
             function_ = function;

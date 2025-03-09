@@ -91,7 +91,7 @@ class BlockyNode {
         if (!chain_initialized_) {
             // genesis block
             RCLCPP_INFO(node_->get_logger(), " *** [%s] Chain created and genesis block added", namespace_.c_str());
-            chain_ = chain::Chain(std::to_string(chain_domain_), msg->priority, msg->uuid, msg->function, crypto_);
+            chain_ = chain::Chain(std::to_string(chain_domain_), msg->uuid, msg->function, crypto_);
             chain_initialized_ = true, in_chain_ = true;
         }
         beacon_ = *msg;
@@ -123,10 +123,6 @@ class BlockyNode {
         std_msgs::msg::String public_key_msg;
         public_key_msg.data = crypto_->getPublicHalf();
         public_key_pub_->publish(public_key_msg);
-
-        // chain::Transaction join_transaction(10, "000", "harvester");
-        // join_transaction.signTransaction(crypto_);
-        // chain_.addBlock(chain::Block("0", {join_transaction}));
     }
 
     void beacons_callback(const farmbot_interfaces::msg::Beacons::SharedPtr msg) {
@@ -136,11 +132,9 @@ class BlockyNode {
 
     void join_service_callback(const std::shared_ptr<jc::Request> req, std::shared_ptr<jc::Response> res) {
         RCLCPP_INFO(node_->get_logger(), " -- Robot %s wants to join the chain", req->robot_uuid.c_str());
-        RCLCPP_INFO(node_->get_logger(), " -- Chain length is at: %zu", chain_.chain_.size());
         res->success = true;
-        chain::Transaction join_transaction(10, req->robot_uuid, "harvester");
-        join_transaction.signTransaction(crypto_);
-        chain_.addBlock(chain::Block({join_transaction}));
+        chain_.addBlock(req->robot_uuid, "harvester", crypto_);
+
         RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
         RCLCPP_INFO(node_->get_logger(), " -- Chain length became: %zu", chain_.chain_.size());
         res->chain = chain_.toMsg();
