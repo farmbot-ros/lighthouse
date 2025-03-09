@@ -18,6 +18,7 @@ class BlockyNode {
   private:
     rclcpp::Node::SharedPtr node_;
     std::string namespace_;
+    int32_t chain_domain_;
     bool genesis_initialized_;
 
     chain::Chain chain_;
@@ -48,6 +49,7 @@ class BlockyNode {
 
         public_key_file_ = node_->get_parameter_or<std::string>("public_key_file", "public_key.pem");
         private_key_file_ = node_->get_parameter_or<std::string>("private_key_file", "private_key.pem");
+        chain_domain_ = node_->get_parameter_or<int32_t>("chain_domain", 987);
 
         privateKey_ = std::make_shared<chain::OpenSSLPrivate>(private_key_file_);
         publicKey_ = std::make_shared<chain::OpenSSLPublic>(public_key_file_);
@@ -69,11 +71,14 @@ class BlockyNode {
 
     void beacon_callback(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
         if (!genesis_initialized_) {
-            chain_ = chain::Chain(msg->name, msg->priority, msg->uuid, msg->function, privateKey_);
+            chain_ = chain::Chain(std::to_string(chain_domain_), msg->priority, msg->uuid, msg->function, privateKey_);
             genesis_initialized_ = true;
         }
     }
     void chain_callback(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
+        if (msg->uuid != std::to_string(chain_domain_)) {
+            return;
+        }
         if (!genesis_initialized_) {
             chain_ = chain::Chain(*msg);
             genesis_initialized_ = true;
@@ -87,6 +92,9 @@ class BlockyNode {
             return;
         }
         chain_pub_->publish(chain_.toMsg());
+        std_msgs::msg::String public_key_msg;
+        public_key_msg.data = publicKey_->toString();
+        public_key_pub_->publish(public_key_msg);
     }
 };
 

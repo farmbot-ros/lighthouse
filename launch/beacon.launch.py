@@ -30,8 +30,11 @@ def launch_setup(context, *args, **kwargs):
     uuid = LaunchConfiguration("uuid").perform(context)
     offline = LaunchConfiguration("offline").perform(context)
     priority = LaunchConfiguration("priority").perform(context)
+    chain_domain = LaunchConfiguration("chain_domain").perform(context)
 
     # convert offile string to seconds, the string can be in the format of "10s" or "10m" or "10h"
+
+    chain_domain_int = int(chain_domain)
 
     nodes_array = []
 
@@ -72,6 +75,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             yaml.safe_load(open(param_file))["blocky"]["ros__parameters"],
             yaml.safe_load(open(param_file))["global"]["ros__parameters"],
+            {"chain_domain": chain_domain_int},
         ],
     )
     nodes_array.append(blocky)
@@ -86,6 +90,7 @@ def generate_launch_description():
     uuid = DeclareLaunchArgument("uuid", default_value=str(uuid4()))
     offline = DeclareLaunchArgument("offline", default_value="60s")
     priority = DeclareLaunchArgument("priority", default_value="0")
+    chain_domain = DeclareLaunchArgument("chain_domain", default_value="1")
 
     return LaunchDescription(
         [
@@ -95,6 +100,7 @@ def generate_launch_description():
             uuid,
             offline,
             priority,
+            chain_domain,
             OpaqueFunction(function=launch_setup),
         ]
     )
