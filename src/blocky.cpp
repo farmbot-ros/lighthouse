@@ -1,6 +1,7 @@
 #include <chrono>
 #include <farmbot_interfaces/msg/detail/beacons__struct.hpp>
 #include <iostream>
+#include <random>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/subscription_options.hpp>
 #include <sstream>
@@ -164,7 +165,8 @@ class BlockyNode {
     }
 
     bool join_request(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
-        std::string whom_to_ask = getNameFromUUID(msg->chain[0].transactions[0].uuid);
+        std::pair<int, int> m = getRandomMember(msg);
+        std::string whom_to_ask = getNameFromUUID(msg->chain[m.first].transactions[m.second].uuid);
         RCLCPP_INFO(node_->get_logger(), " *** Asking >>> %s <<< to join the chain", whom_to_ask.c_str());
         target_permission_client_ =
             node_->create_client<JoinChain>("/" + whom_to_ask + "/join_chain", qos_profile, client_group_);
@@ -214,6 +216,21 @@ class BlockyNode {
     }
 
   private:
+    std::pair<int, int> getRandomMember(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
+        if (msg == nullptr || msg->chain.empty()) {
+            return {0, 0};
+        }
+        std::random_device rd;
+        std::mt19937 rng(rd());
+        std::uniform_int_distribution<std::size_t> chainDist(0, msg->chain.size() - 1);
+        std::size_t randomChainIndex = chainDist(rng);
+        if (msg->chain[randomChainIndex].transactions.empty()) {
+            return {randomChainIndex, 0};
+        }
+        std::uniform_int_distribution<std::size_t> transDist(0, msg->chain[randomChainIndex].transactions.size() - 1);
+        std::size_t randomTransIndex = transDist(rng);
+        return {randomChainIndex, randomTransIndex};
+    }
     std::string getNameFromUUID(const std::string &uuid) {
         std::string name;
         for (const auto &beacon : beacons_.beacons) {
