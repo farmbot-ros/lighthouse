@@ -37,7 +37,7 @@ class BlockyNode {
     chain::Chain chain_;
     std::shared_ptr<chain::Crypto> crypto_;
     std::string private_key_file_;
-    bool chain_initialized_, in_chain_, got_beacons_, got_beacon_, got_target_key_;
+    bool chain_initialized_, in_chain_, got_beacons_, got_beacon_;
 
     rclcpp::CallbackGroup::SharedPtr client_group_, keysub_geoup_, service_group_;
     rmw_qos_profile_t qos_profile;
@@ -154,11 +154,11 @@ class BlockyNode {
 
     bool join_request(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
         std::pair<int, int> m = getRandomMember(msg);
-        std::string whom_to_ask = getNameFromUUID(msg->chain[m.first].transactions[m.second].uuid);
+        auto the_uuid = msg->chain[m.first].transactions[m.second].uuid;
+        std::string whom_to_ask = getNameFromUUID(the_uuid);
         target_permission_client_ =
             node_->create_client<JoinChain>("/" + whom_to_ask + "/join_chain", qos_profile, client_group_);
-        EVP_PKEY *public_key =
-            chain::loadPublicKeyFromPEM(getKeyStringFromUUID(msg->chain[m.first].transactions[m.second].uuid));
+        EVP_PKEY *public_key = chain::loadPublicKeyFromPEM(getKeyStringFromUUID(the_uuid));
 
         RCLCPP_INFO(node_->get_logger(), " --- Asking robot >>> %s <<< to join the chain", whom_to_ask.c_str());
         auto request = std::make_shared<JoinChain::Request>();
@@ -227,16 +227,18 @@ class BlockyNode {
         // if more than just the genesis block is in the chain, then then ask everyone in the chain to vote
         std::pair<int, int> vote_count = {0, 0};
         for (uint i = 0; i < chain_.blocks_.size(); i++) {
+            vote_count.first++;
             std::string the_uuid = chain_.blocks_[i].transactions_[0].uuid_;
             if (the_uuid == beacon_.uuid) {
+                if (vote_policy_) {
+                    vote_count.second++;
+                }
                 continue;
             }
-            vote_count.first++;
-            auto who_to_ask = getNameFromUUID(chain_.blocks_[i].transactions_[0].uuid_);
+            auto who_to_ask = getNameFromUUID(the_uuid);
+            EVP_PKEY *public_key = chain::loadPublicKeyFromPEM(getKeyStringFromUUID(the_uuid));
             target_vote_client_ =
                 node_->create_client<VoteChain>("/" + who_to_ask + "/vote_chain", qos_profile, client_group_);
-            EVP_PKEY *public_key =
-                chain::loadPublicKeyFromPEM(getKeyStringFromUUID(chain_.blocks_[i].transactions_[0].uuid_));
             RCLCPP_INFO(node_->get_logger(), " *** Asking robot >>> %s <<< to vote", who_to_ask.c_str());
             auto request = std::make_shared<VoteChain::Request>();
             request->robot_uuid = beacon_.uuid;
@@ -257,17 +259,12 @@ class BlockyNode {
             std::string decoded_mes_sig_str = result->message_signature;
             std::vector<unsigned char> decoded_mes_sig_vec = chain::base64Decode(decoded_mes_sig_str);
             bool signature = chain::verify(public_key, result->message, decoded_mes_sig_vec);
-            if (!signature) {
-                RCLCPP_WARN(node_->get_logger(), " -- Voting failed: invalid signature");
-            } else if (!result->vote) {
-                RCLCPP_WARN(node_->get_logger(), " -- [%s] voted NO, reason: %s", who_to_ask.c_str(),
-                            result->message.c_str());
-            } else {
-                RCLCPP_INFO(node_->get_logger(), " -- [%s] voted YES, reason: %s", who_to_ask.c_str(),
-                            result->message.c_str());
+            if (result->vote && signature == true) {
                 vote_count.second++;
             }
         }
+        RCLCPP_INFO(node_->get_logger(), " ------------>> With %d votes from %d total members, decision is %s",
+                    vote_count.second, vote_count.first, vote_count.second >= vote_count.first ? "YES" : "NO");
         return (vote_count.second >= vote_count.first);
     }
 
