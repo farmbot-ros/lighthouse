@@ -14,6 +14,7 @@
 #include <farmbot_interfaces/msg/beacons.hpp>
 #include <farmbot_interfaces/msg/chain.hpp>
 #include <farmbot_interfaces/srv/join_chain.hpp>
+#include <farmbot_interfaces/srv/update_chain.hpp>
 #include <farmbot_interfaces/srv/vote_chain.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -32,14 +33,15 @@ class BlockyNode {
 
     farmbot_interfaces::msg::Beacon beacon_;
     farmbot_interfaces::msg::Beacons beacons_;
-    std::vector<std::pair<std::string, std::string>> uuids_;
+    std::vector<std::pair<std::string, std::string>> robot_passphrases_;
+    std::string my_passphrase_;
 
     chain::Chain chain_;
     std::shared_ptr<chain::Crypto> crypto_;
     std::string private_key_file_;
     bool chain_initialized_, in_chain_, got_beacons_, got_beacon_;
 
-    rclcpp::CallbackGroup::SharedPtr client_group_, keysub_geoup_, service_group_;
+    rclcpp::CallbackGroup::SharedPtr client_group_, service_group_;
     rmw_qos_profile_t qos_profile;
 
     rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
@@ -47,7 +49,6 @@ class BlockyNode {
 
     rclcpp::Subscription<farmbot_interfaces::msg::Beacon>::SharedPtr beacon_sub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Beacons>::SharedPtr beacons_sub_;
-    rclcpp::SubscriptionOptions sub_options;
 
     rclcpp::TimerBase::SharedPtr chain_publish_;
 
@@ -59,51 +60,57 @@ class BlockyNode {
     rclcpp::Service<VoteChain>::SharedPtr vote_service_;
     rclcpp::Client<VoteChain>::SharedPtr target_vote_client_;
 
+    using UpdateChain = farmbot_interfaces::srv::UpdateChain;
+    rclcpp::Service<UpdateChain>::SharedPtr update_service_;
+    rclcpp::Client<UpdateChain>::SharedPtr target_update_client_;
+
   public:
     BlockyNode(rclcpp::Node::SharedPtr node) : node_(node) {
         RCLCPP_INFO(node_->get_logger(), "BlockyNode started");
         // Namespace
         namespace_ = node_->get_namespace();
+        if (!namespace_.empty() && namespace_[0] == '/') {
+            namespace_.erase(0, 1);
+        }
 
         private_key_file_ = node_->get_parameter_or<std::string>("private_key_file", "private_key.pem");
         RCLCPP_INFO(node_->get_logger(), " *** Private key file: %s", private_key_file_.c_str());
         chain_domain_ = node_->get_parameter_or<int32_t>("chain_domain", 987);
         password = node_->get_parameter_or<std::string>("password", "farmbot");
+        my_passphrase_ = generateRandomPassphrase(10);
 
         crypto_ = std::make_shared<chain::Crypto>(private_key_file_);
 
         service_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
         client_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-        keysub_geoup_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-        sub_options.callback_group = keysub_geoup_;
         qos_profile = rmw_qos_profile_services_default;
     }
 
     void setup() {
         chain_pub_ = node_->create_publisher<farmbot_interfaces::msg::Chain>("/chain", 10);
+        chain_publish_ = node_->create_wall_timer(1s, std::bind(&BlockyNode::chain_publisher, this));
 
         beacon_sub_ = node_->create_subscription<farmbot_interfaces::msg::Beacon>(
-            "beacon/rci", 10, std::bind(&BlockyNode::genesisCreate, this, _1));
+            "beacon/rci", 10, std::bind(&BlockyNode::initialize_chain, this, _1));
         beacons_sub_ = node_->create_subscription<farmbot_interfaces::msg::Beacons>(
             "/beacons/rci", 10, std::bind(&BlockyNode::beacons_callback, this, _1));
         chain_sub_ = node_->create_subscription<farmbot_interfaces::msg::Chain>(
-            "/chain", 10, std::bind(&BlockyNode::chainCallback, this, _1));
-
-        chain_publish_ = node_->create_wall_timer(1s, std::bind(&BlockyNode::chainPubT, this));
+            "/chain", 10, std::bind(&BlockyNode::all_chain_callback, this, _1));
 
         join_service_ = node_->create_service<JoinChain>(
             "join_chain", std::bind(&BlockyNode::join_response, this, _1, _2), qos_profile, service_group_);
-
         vote_service_ = node_->create_service<VoteChain>(
             "vote_chain", std::bind(&BlockyNode::vote_response, this, _1, _2), qos_profile, service_group_);
+        update_service_ = node_->create_service<UpdateChain>(
+            "update_chain", std::bind(&BlockyNode::update_response, this, _1, _2), qos_profile, service_group_);
 
         RCLCPP_INFO(node_->get_logger(), "BeaconNode started");
     }
 
-    void genesisCreate(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
+    void initialize_chain(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
         if (!chain_initialized_) {
-            // genesis block
-            RCLCPP_INFO(node_->get_logger(), " *** [%s] Chain created and genesis block added", namespace_.c_str());
+            RCLCPP_INFO(node_->get_logger(), " *** [%s] created GENESIS block and initialized the chain in domain [%s]",
+                        namespace_.c_str(), std::to_string(chain_domain_).c_str());
             chain_ = chain::Chain(std::to_string(chain_domain_), msg->uuid, msg->function, crypto_);
             chain_initialized_ = true, in_chain_ = true;
         }
@@ -111,7 +118,8 @@ class BlockyNode {
         got_beacon_ = true;
         beacon_sub_.reset();
     }
-    void chainPubT() {
+
+    void chain_publisher() {
         if (in_chain_) {
             chain_pub_->publish(chain_.toMsg());
         }
@@ -122,7 +130,7 @@ class BlockyNode {
         got_beacons_ = true;
     }
 
-    void chainCallback(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
+    void all_chain_callback(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
         if (msg->uuid != std::to_string(chain_domain_)) {
             return;
         } else if (!chain_initialized_) {
@@ -130,10 +138,8 @@ class BlockyNode {
             chain_ = chain::Chain(*msg);
             chain_initialized_ = true;
         } else if (!in_chain_ && got_beacons_ && got_beacon_) {
-            RCLCPP_INFO(node_->get_logger(), " R_UUID: %s", beacon_.uuid.c_str());
             for (const auto &block : chain_.blocks_) {
                 for (const auto &transaction : block.transactions_) {
-                    RCLCPP_INFO(node_->get_logger(), " T_UUID: %s", transaction.uuid_.c_str());
                     if (transaction.uuid_ == beacon_.uuid) {
                         in_chain_ = true, chain_initialized_ = true;
                         RCLCPP_INFO(node_->get_logger(), " *** [%s] I exist in the chain, thus not joining",
@@ -178,7 +184,7 @@ class BlockyNode {
         }
         auto result_future = target_permission_client_->async_send_request(request);
         while (rclcpp::ok() && result_future.wait_for(1s) == std::future_status::timeout) {
-            RCLCPP_INFO(node_->get_logger(), "Waiting for response from GPS2ENU service...");
+            RCLCPP_INFO(node_->get_logger(), "Waiting for response from [JOIN] service...");
         }
         auto result = result_future.get();
         std::string decoded_mes_sig_str = result->message_signature;
@@ -207,7 +213,7 @@ class BlockyNode {
         if (password_str != password) {
             res->success = false;
             res->message = "Join failed: password is not valid";
-        } else if (!chainConsensus(req->robot_uuid.c_str())) {
+        } else if (!vote_request(req->robot_uuid.c_str())) {
             res->success = false;
             res->message = "Join failed: chain consensus not reached";
         } else {
@@ -215,16 +221,17 @@ class BlockyNode {
             res->success = true;
             res->chain = chain_.toMsg();
             res->message = "Allowing " + req->robot_uuid + " to join the chain";
+            // notify the blockchain that a new robot has joined
+            update_request();
         }
         auto message_signed = crypto_->sign(res->message);
         res->message_signature = chain::base64Encode(message_signed);
     }
 
-    bool chainConsensus(std::string robot_to_join_uuid) {
+    bool vote_request(std::string robot_to_join_uuid) {
         if (chain_.blocks_.size() < 2) {
             return true;
         }
-        // if more than just the genesis block is in the chain, then then ask everyone in the chain to vote
         std::pair<int, int> vote_count = {0, 0};
         for (uint i = 0; i < chain_.blocks_.size(); i++) {
             vote_count.first++;
@@ -253,7 +260,7 @@ class BlockyNode {
             }
             auto result_future = target_vote_client_->async_send_request(request);
             while (rclcpp::ok() && result_future.wait_for(1s) == std::future_status::timeout) {
-                RCLCPP_INFO(node_->get_logger(), "Waiting for response from GPS2ENU service...");
+                RCLCPP_INFO(node_->get_logger(), "Waiting for response from [VOTE] service...");
             }
             auto result = result_future.get();
             std::string decoded_mes_sig_str = result->message_signature;
@@ -262,6 +269,12 @@ class BlockyNode {
             if (result->vote && signature == true) {
                 vote_count.second++;
             }
+
+            std::string passphrase_enc = result->encrypted_phrase;
+            std::vector<unsigned char> ciphertextBinary = chain::base64Decode(passphrase_enc);
+            std::vector<unsigned char> decrypted = crypto_->decrypt(ciphertextBinary);
+            std::string passphrase_str = chain::vectorToString(decrypted);
+            robot_passphrases_.push_back(std::make_pair(the_uuid, passphrase_str));
         }
         RCLCPP_INFO(node_->get_logger(), " ------------>> With %d votes from %d total members, decision is %s",
                     vote_count.second, vote_count.first, vote_count.second >= vote_count.first ? "YES" : "NO");
@@ -280,6 +293,59 @@ class BlockyNode {
         }
         auto message_signed = crypto_->sign(res->message);
         res->message_signature = chain::base64Encode(message_signed);
+
+        EVP_PKEY *public_key = chain::loadPublicKeyFromPEM(getKeyStringFromUUID(req->robot_uuid));
+        std::vector<unsigned char> ciphertext = chain::encrypt(public_key, my_passphrase_);
+        auto passwd_str = chain::base64Encode(ciphertext);
+        res->encrypted_phrase = passwd_str;
+    }
+
+    void update_request() {
+        for (uint i = 0; i < robot_passphrases_.size(); i++) {
+            auto the_uuid = robot_passphrases_[i].first;
+            auto the_passphrase = robot_passphrases_[i].second;
+            std::string whom_to_ask = getNameFromUUID(the_uuid);
+            target_update_client_ =
+                node_->create_client<UpdateChain>("/" + whom_to_ask + "/update_chain", qos_profile, client_group_);
+            RCLCPP_INFO(node_->get_logger(), " *** Asking robot >>> %s <<< to update the chain", whom_to_ask.c_str());
+            auto request = std::make_shared<UpdateChain::Request>();
+
+            auto public_key = chain::loadPublicKeyFromPEM(getKeyStringFromUUID(the_uuid));
+            std::vector<unsigned char> ciphertext = chain::encrypt(public_key, the_passphrase);
+            auto passwd_str = chain::base64Encode(ciphertext);
+            request->encrypted_passphrase = passwd_str;
+            request->chain = chain_.toMsg();
+            while (!target_update_client_->wait_for_service(1s)) {
+                if (!rclcpp::ok()) {
+                    RCLCPP_ERROR(node_->get_logger(), " -- Update service not available, node shutting down");
+                    return;
+                }
+                RCLCPP_INFO(node_->get_logger(), " -- Waiting for service to appear...");
+            }
+            auto result_future = target_update_client_->async_send_request(request);
+            while (rclcpp::ok() && result_future.wait_for(1s) == std::future_status::timeout) {
+                RCLCPP_INFO(node_->get_logger(), "Waiting for response from [UPDATE] service...");
+            }
+            auto result = result_future.get();
+            if (result->success) {
+                RCLCPP_INFO(node_->get_logger(), " -- Robot %s updated the chain", the_uuid.c_str());
+            }
+        }
+    }
+
+    void update_response(const std::shared_ptr<UpdateChain::Request> req, std::shared_ptr<UpdateChain::Response> res) {
+        RCLCPP_INFO(node_->get_logger(), " -- Update chain signal recieved ... checking validity");
+        std::string passphrase_enc = req->encrypted_passphrase;
+        std::vector<unsigned char> ciphertextBinary = chain::base64Decode(passphrase_enc);
+        std::vector<unsigned char> decrypted = crypto_->decrypt(ciphertextBinary);
+        std::string passphrase_str = chain::vectorToString(decrypted);
+        if (passphrase_str != my_passphrase_) {
+            res->success = false;
+        } else {
+            res->success = true;
+            chain_ = chain::Chain(req->chain);
+            RCLCPP_INFO(node_->get_logger(), " -- Chain updated");
+        }
     }
 
   private:
@@ -308,7 +374,6 @@ class BlockyNode {
         }
         return name;
     }
-
     std::string getKeyStringFromUUID(const std::string &uuid) {
         std::string key;
         for (const auto &beacon : beacons_.beacons) {
@@ -318,6 +383,16 @@ class BlockyNode {
             }
         }
         return key;
+    }
+
+    std::string generateRandomPassphrase(int length) {
+        const std::string characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        std::string passphrase;
+        for (int i = 0; i < length; ++i) {
+            int randomIndex = std::rand() % characters.size();
+            passphrase += characters[randomIndex];
+        }
+        return passphrase;
     }
 };
 
