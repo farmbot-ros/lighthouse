@@ -17,3 +17,4 @@ capabilities:
         function: "harvester"
         color: "#ff0000"
         uuid: "00000000-0000-0000-0000-000000000000"
+        private_key_file: "/doc/code/farmbot/src/lighthouse/config/private_key.pem"

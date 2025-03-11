@@ -15,7 +15,7 @@
 using namespace std::chrono_literals;
 using namespace std::placeholders;
 
-class BeaconNode : public rclcpp::Node {
+class CapabilitiesNode : public rclcpp::Node {
   private:
     std::string namespace_;
     int timer_to_offline;
@@ -35,7 +35,7 @@ class BeaconNode : public rclcpp::Node {
     // This node's own beacon.
 
   public:
-    BeaconNode() : Node("beacon_node") {
+    CapabilitiesNode() : Node("beacon_node") {
         // Namespace
         namespace_ = this->get_namespace();
         if (!namespace_.empty() && namespace_[0] == '/') {
@@ -48,11 +48,11 @@ class BeaconNode : public rclcpp::Node {
         // "beacons/rci" (rci stands for "Robot Capabilitiy Index")
         publisher_ = this->create_publisher<farmbot_interfaces::msg::Beacons>("/beacons/rci", 10);
         all_beacons_sub = this->create_subscription<farmbot_interfaces::msg::Beacons>(
-            "/beacons/rci", 10, std::bind(&BeaconNode::all_beacons_callback, this, _1));
+            "/beacons/rci", 10, std::bind(&CapabilitiesNode::all_beacons_callback, this, _1));
         single_beacon_sub = this->create_subscription<farmbot_interfaces::msg::Beacon>(
-            "beacon/rci", 10, std::bind(&BeaconNode::single_beacon_callback, this, _1));
-        timer_ = this->create_wall_timer(10s, std::bind(&BeaconNode::timer_callback, this));
-        offline_timer_ = this->create_wall_timer(1s, std::bind(&BeaconNode::offline_timer_callback, this));
+            "beacon/rci", 10, std::bind(&CapabilitiesNode::single_beacon_callback, this, _1));
+        timer_ = this->create_wall_timer(10s, std::bind(&CapabilitiesNode::timer_callback, this));
+        offline_timer_ = this->create_wall_timer(1s, std::bind(&CapabilitiesNode::offline_timer_callback, this));
 
         RCLCPP_INFO(this->get_logger(), "BeaconNode started");
     }
@@ -117,7 +117,7 @@ class BeaconNode : public rclcpp::Node {
 
 int main(int argc, char *argv[]) {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<BeaconNode>();
+    auto node = std::make_shared<CapabilitiesNode>();
     rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;

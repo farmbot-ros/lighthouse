@@ -52,7 +52,9 @@ def launch_setup(context, *args, **kwargs):
             {"color": color} if color != "" else {},
             {"uuid": uuid} if uuid != "" else {},
             {"priority": priority} if priority != "" else {},
+            {"private_key_file": key_file} if key_file != "" else {},
         ],
+        output="screen",
     )
     nodes_array.append(capabilities)
 
@@ -66,6 +68,7 @@ def launch_setup(context, *args, **kwargs):
             yaml.safe_load(open(param_file))["global"]["ros__parameters"],
             {"offline": convert_to_seconds(offline)},
         ],
+        output="screen",
     )
     nodes_array.append(beacon)
 
