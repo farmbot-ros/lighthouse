@@ -59,9 +59,6 @@ class BlockyNode {
         RCLCPP_INFO(node_->get_logger(), "BlockyNode started");
         // Namespace
         namespace_ = node_->get_namespace();
-        if (!namespace_.empty() && namespace_[0] == '/') {
-            namespace_ = namespace_.substr(1);
-        }
 
         private_key_file_ = node_->get_parameter_or<std::string>("private_key_file", "private_key.pem");
         RCLCPP_INFO(node_->get_logger(), " *** Private key file: %s", private_key_file_.c_str());
@@ -142,26 +139,12 @@ class BlockyNode {
                 }
             }
             in_chain_ = join_request(msg);
+            if (!in_chain_) {
+                RCLCPP_WARN(node_->get_logger(),
+                            " -------------- Not allowed in the chain, thus quitting -------------------");
+                rclcpp::shutdown();
+            }
         }
-    }
-
-    void join_response(const std::shared_ptr<JoinChain::Request> req, std::shared_ptr<JoinChain::Response> res) {
-        RCLCPP_INFO(node_->get_logger(), " -- Robot %s wants to join the chain", req->robot_uuid.c_str());
-        /// ----------- Decrypt password -----------
-        std::string password_enc = req->encrypted_password;
-        std::vector<unsigned char> ciphertextBinary = chain::base64Decode(password_enc);
-        std::vector<unsigned char> decrypted = crypto_->decrypt(ciphertextBinary);
-        std::string password_str = chain::vectorToString(decrypted);
-        RCLCPP_INFO(node_->get_logger(), " -- Password: %s", password_str.c_str());
-        if (password_str != password) {
-            RCLCPP_WARN(node_->get_logger(), " -- Password is not valid");
-            res->success = false;
-            return;
-        }
-        chain_.addBlock(req->robot_uuid, "harvester", crypto_);
-        RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
-        res->chain = chain_.toMsg();
-        res->success = true;
     }
 
     bool join_request(const farmbot_interfaces::msg::Chain::SharedPtr msg) {
@@ -207,12 +190,50 @@ class BlockyNode {
         }
         auto result = result_future.get();
         if (!result->success) {
-            RCLCPP_WARN(node_->get_logger(), " -- Join failed");
+            RCLCPP_WARN(node_->get_logger(), " -- Join failed, reason %s:", result->message.c_str());
             return false;
         }
         RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
         chain_ = chain::Chain(result->chain);
         return true;
+    }
+
+    void join_response(const std::shared_ptr<JoinChain::Request> req, std::shared_ptr<JoinChain::Response> res) {
+        RCLCPP_INFO(node_->get_logger(), " -- Robot %s wants to join the chain", req->robot_uuid.c_str());
+        /// ----------- Decrypt password -----------
+        std::string password_enc = req->encrypted_password;
+        std::vector<unsigned char> ciphertextBinary = chain::base64Decode(password_enc);
+        std::vector<unsigned char> decrypted = crypto_->decrypt(ciphertextBinary);
+        std::string password_str = chain::vectorToString(decrypted);
+        // RCLCPP_INFO(node_->get_logger(), " -- Password: %s", password_str.c_str());
+        if (password_str != password) {
+            res->success = false;
+            res->message = "Password is not valid";
+            RCLCPP_WARN(node_->get_logger(), " -- Join failed, reason %s:", res->message.c_str());
+            return;
+        } else if (!chainConsensus()) {
+            res->success = false;
+            res->message = "Chain consensus not reached";
+            RCLCPP_WARN(node_->get_logger(), " -- Join failed, reason %s:", res->message.c_str());
+            return;
+        }
+        chain_.addBlock(req->robot_uuid, "harvester", crypto_);
+        RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
+        res->chain = chain_.toMsg();
+        res->success = true;
+    }
+
+    bool chainConsensus() {
+        if (chain_.blocks_.size() < 2) {
+            return true;
+        }
+        // if more than just the genesis block is in the chain, then then ask everyone in the chain to vote
+        for (const auto &block : chain_.blocks_) {
+            for (const auto &transaction : block.transactions_) {
+                // std::string whom_to_ask = getNameFromUUID(msg->chain[m.first].transactions[m.second].uuid);
+            }
+        }
+        return false;
     }
 
   private:

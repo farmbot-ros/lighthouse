@@ -33,9 +33,9 @@ def launch_setup(context, *args, **kwargs):
     chain_domain = LaunchConfiguration("chain_domain").perform(context)
     password = LaunchConfiguration("password").perform(context)
     key_file = LaunchConfiguration("key_file").perform(context)
+    blockchain_arg = LaunchConfiguration("blockchain").perform(context)
 
-    # convert offile string to seconds, the string can be in the format of "10s" or "10m" or "10h"
-
+    blockchain = blockchain_arg == "true"
     chain_domain_int = int(chain_domain)
 
     nodes_array = []
@@ -83,7 +83,8 @@ def launch_setup(context, *args, **kwargs):
         ],
         output="screen",
     )
-    nodes_array.append(blocky)
+    if blockchain:
+        nodes_array.append(blocky)
 
     return nodes_array
 
@@ -98,6 +99,7 @@ def generate_launch_description():
     chain_domain = DeclareLaunchArgument("chain_domain", default_value="1")
     password = DeclareLaunchArgument("password", default_value="")
     key_file = DeclareLaunchArgument("key_file", default_value="")
+    blockchain = DeclareLaunchArgument("blockchain", default_value="true")
 
     return LaunchDescription(
         [
@@ -110,6 +112,7 @@ def generate_launch_description():
             chain_domain,
             password,
             key_file,
+            blockchain,
             OpaqueFunction(function=launch_setup),
         ]
     )
