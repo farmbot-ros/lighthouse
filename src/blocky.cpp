@@ -189,7 +189,14 @@ class BlockyNode {
             RCLCPP_INFO(node_->get_logger(), "Waiting for response from GPS2ENU service...");
         }
         auto result = result_future.get();
-        if (!result->success) {
+        std::string decoded_mes_sig_str = result->message_signature;
+        std::vector<unsigned char> decoded_mes_sig_vec = chain::base64Decode(decoded_mes_sig_str);
+        bool signature = chain::verify(public_key, result->message, decoded_mes_sig_vec);
+        RCLCPP_INFO(node_->get_logger(), " -- Verifying signature  --->  %s", signature ? "true" : "false");
+        if (!signature) {
+            RCLCPP_WARN(node_->get_logger(), " -- Join failed, reason invalid signature");
+            return false;
+        } else if (!result->success) {
             RCLCPP_WARN(node_->get_logger(), " -- Join failed, reason %s:", result->message.c_str());
             return false;
         }
@@ -208,19 +215,19 @@ class BlockyNode {
         // RCLCPP_INFO(node_->get_logger(), " -- Password: %s", password_str.c_str());
         if (password_str != password) {
             res->success = false;
-            res->message = "Password is not valid";
-            RCLCPP_WARN(node_->get_logger(), " -- Join failed, reason %s:", res->message.c_str());
-            return;
+            res->message = "Join failed: password is not valid";
         } else if (!chainConsensus()) {
             res->success = false;
-            res->message = "Chain consensus not reached";
-            RCLCPP_WARN(node_->get_logger(), " -- Join failed, reason %s:", res->message.c_str());
-            return;
+            res->message = "Join failed: chain consensus not reached";
+        } else {
+            chain_.addBlock(req->robot_uuid, "harvester", crypto_);
+            res->success = true;
+            res->chain = chain_.toMsg();
+            res->message = "Joined the chain successfully";
         }
-        chain_.addBlock(req->robot_uuid, "harvester", crypto_);
-        RCLCPP_INFO(node_->get_logger(), " -- Joined the chain");
-        res->chain = chain_.toMsg();
-        res->success = true;
+        RCLCPP_WARN(node_->get_logger(), " -- STATUS: %s", res->message.c_str());
+        auto message_signed = crypto_->sign(res->message);
+        res->message_signature = chain::base64Encode(message_signed);
     }
 
     bool chainConsensus() {
