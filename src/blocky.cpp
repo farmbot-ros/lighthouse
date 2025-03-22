@@ -10,8 +10,8 @@
 
 #include "blocky/chain.hpp"
 
-#include <farmbot_interfaces/msg/beacon.hpp>
-#include <farmbot_interfaces/msg/beacons.hpp>
+#include <farmbot_interfaces/msg/agent.hpp>
+#include <farmbot_interfaces/msg/agents.hpp>
 #include <farmbot_interfaces/msg/chain.hpp>
 #include <farmbot_interfaces/srv/join_chain.hpp>
 #include <farmbot_interfaces/srv/update_chain.hpp>
@@ -31,8 +31,8 @@ class BlockyNode {
     std::string password;
     bool vote_policy_ = true;
 
-    farmbot_interfaces::msg::Beacon beacon_;
-    farmbot_interfaces::msg::Beacons beacons_;
+    farmbot_interfaces::msg::Agent beacon_;
+    farmbot_interfaces::msg::Agents beacons_;
     std::vector<std::pair<std::string, std::string>> robot_passphrases_;
     std::string my_passphrase_;
 
@@ -47,8 +47,8 @@ class BlockyNode {
     rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
 
-    rclcpp::Subscription<farmbot_interfaces::msg::Beacon>::SharedPtr beacon_sub_;
-    rclcpp::Subscription<farmbot_interfaces::msg::Beacons>::SharedPtr beacons_sub_;
+    rclcpp::Subscription<farmbot_interfaces::msg::Agent>::SharedPtr beacon_sub_;
+    rclcpp::Subscription<farmbot_interfaces::msg::Agents>::SharedPtr beacons_sub_;
 
     rclcpp::TimerBase::SharedPtr chain_publish_;
 
@@ -90,9 +90,9 @@ class BlockyNode {
         chain_pub_ = node_->create_publisher<farmbot_interfaces::msg::Chain>("/chain", 10);
         chain_publish_ = node_->create_wall_timer(1s, std::bind(&BlockyNode::chain_publisher, this));
 
-        beacon_sub_ = node_->create_subscription<farmbot_interfaces::msg::Beacon>(
+        beacon_sub_ = node_->create_subscription<farmbot_interfaces::msg::Agent>(
             "beacon/rci", 10, std::bind(&BlockyNode::initialize_chain, this, _1));
-        beacons_sub_ = node_->create_subscription<farmbot_interfaces::msg::Beacons>(
+        beacons_sub_ = node_->create_subscription<farmbot_interfaces::msg::Agents>(
             "/beacons/rci", 10, std::bind(&BlockyNode::beacons_callback, this, _1));
         chain_sub_ = node_->create_subscription<farmbot_interfaces::msg::Chain>(
             "/chain", 10, std::bind(&BlockyNode::all_chain_callback, this, _1));
@@ -107,7 +107,7 @@ class BlockyNode {
         RCLCPP_INFO(node_->get_logger(), "BeaconNode started");
     }
 
-    void initialize_chain(const farmbot_interfaces::msg::Beacon::SharedPtr msg) {
+    void initialize_chain(const farmbot_interfaces::msg::Agent::SharedPtr msg) {
         if (!chain_initialized_) {
             RCLCPP_INFO(node_->get_logger(), " *** [%s] created GENESIS block and initialized the chain in domain [%s]",
                         namespace_.c_str(), std::to_string(chain_domain_).c_str());
@@ -125,7 +125,7 @@ class BlockyNode {
         }
     }
 
-    void beacons_callback(const farmbot_interfaces::msg::Beacons::SharedPtr msg) {
+    void beacons_callback(const farmbot_interfaces::msg::Agents::SharedPtr msg) {
         beacons_ = *msg;
         got_beacons_ = true;
     }

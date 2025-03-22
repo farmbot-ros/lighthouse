@@ -1,5 +1,5 @@
 #include "blocky/signer.hpp"
-#include "farmbot_interfaces/msg/beacon.hpp"
+#include "farmbot_interfaces/msg/agent.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 #include <string>
@@ -17,11 +17,11 @@ class CapClass {
   private:
     std::string namespace_;
     rclcpp::Node::SharedPtr node_;
-    farmbot_interfaces::msg::Beacon my_beacon_;
+    farmbot_interfaces::msg::Agent my_beacon_;
     std::shared_ptr<chain::Crypto> crypto_;
 
     // Publisher and Subscriber.
-    rclcpp::Publisher<farmbot_interfaces::msg::Beacon>::SharedPtr publisher_;
+    rclcpp::Publisher<farmbot_interfaces::msg::Agent>::SharedPtr publisher_;
     // timer
     rclcpp::TimerBase::SharedPtr timer_;
     // This node's own beacon.
@@ -39,7 +39,7 @@ class CapClass {
         }
 
         // Create a publisher and a subscriber on the same topic beacons/rci" (rci stands for "Robot Capabilitiy Index")
-        publisher_ = node_->create_publisher<farmbot_interfaces::msg::Beacon>("beacon/rci", 10);
+        publisher_ = node_->create_publisher<farmbot_interfaces::msg::Agent>("beacon/rci", 10);
         timer_ = node_->create_wall_timer(3s, std::bind(&CapClass::timer_callback, this));
 
         // capability parameter
@@ -52,7 +52,8 @@ class CapClass {
         RCLCPP_INFO(node_->get_logger(), "Private key file: %s", private_key_file_.c_str());
         crypto_ = std::make_shared<chain::Crypto>(private_key_file_);
         my_beacon_pub_key_ = crypto_->getPublicHalf();
-        RCLCPP_INFO(node_->get_logger(), "Robots %s private key: %s", namespace_.c_str(), my_beacon_pub_key_.c_str());
+        RCLCPP_INFO(node_->get_logger(), "Robots %s private key: \n\n%s", namespace_.c_str(),
+                    my_beacon_pub_key_.c_str());
 
         // Initialize this node's own beacon.
         my_beacon_.uuid = my_beacon_uuid_;
