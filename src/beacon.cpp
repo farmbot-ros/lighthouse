@@ -43,7 +43,7 @@ class CapabilitiesNode : public rclcpp::Node {
         }
 
         this->declare_parameter("offline", rclcpp::PARAMETER_INTEGER);
-        timer_to_offline = this->get_parameter_or<int>("offline", 60);
+        timer_to_offline = this->get_parameter_or<int>("offline", 360);
 
         // "beacons/rci" (rci stands for "Robot Capabilitiy Index")
         publisher_ = this->create_publisher<farmbot_interfaces::msg::Agents>("/beacons/rci", 10);

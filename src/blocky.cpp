@@ -1,5 +1,4 @@
 #include <chrono>
-#include <farmbot_interfaces/msg/detail/beacons__struct.hpp>
 #include <iostream>
 #include <random>
 #include <rclcpp/executors.hpp>
@@ -42,7 +41,6 @@ class BlockyNode {
     bool chain_initialized_, in_chain_, got_beacons_, got_beacon_;
 
     rclcpp::CallbackGroup::SharedPtr client_group_, service_group_;
-    rmw_qos_profile_t qos_profile;
 
     rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
@@ -64,6 +62,8 @@ class BlockyNode {
     rclcpp::Service<UpdateChain>::SharedPtr update_service_;
     rclcpp::Client<UpdateChain>::SharedPtr target_update_client_;
 
+    rclcpp::QoS qos = rclcpp::QoS(rclcpp::KeepLast(10));
+
   public:
     BlockyNode(rclcpp::Node::SharedPtr node) : node_(node) {
         RCLCPP_INFO(node_->get_logger(), "BlockyNode started");
@@ -83,7 +83,6 @@ class BlockyNode {
 
         service_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
         client_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-        qos_profile = rmw_qos_profile_services_default;
     }
 
     void setup() {
@@ -98,11 +97,11 @@ class BlockyNode {
             "/chain", 10, std::bind(&BlockyNode::all_chain_callback, this, _1));
 
         join_service_ = node_->create_service<JoinChain>(
-            "join_chain", std::bind(&BlockyNode::join_response, this, _1, _2), qos_profile, service_group_);
+            "join_chain", std::bind(&BlockyNode::join_response, this, _1, _2), qos, service_group_);
         vote_service_ = node_->create_service<VoteChain>(
-            "vote_chain", std::bind(&BlockyNode::vote_response, this, _1, _2), qos_profile, service_group_);
+            "vote_chain", std::bind(&BlockyNode::vote_response, this, _1, _2), qos, service_group_);
         update_service_ = node_->create_service<UpdateChain>(
-            "update_chain", std::bind(&BlockyNode::update_response, this, _1, _2), qos_profile, service_group_);
+            "update_chain", std::bind(&BlockyNode::update_response, this, _1, _2), qos, service_group_);
 
         RCLCPP_INFO(node_->get_logger(), "BeaconNode started");
     }
@@ -163,7 +162,7 @@ class BlockyNode {
         auto the_uuid = msg->chain[m.first].transactions[m.second].uuid;
         std::string whom_to_ask = getNameFromUUID(the_uuid);
         target_permission_client_ =
-            node_->create_client<JoinChain>("/" + whom_to_ask + "/join_chain", qos_profile, client_group_);
+            node_->create_client<JoinChain>("/" + whom_to_ask + "/join_chain", qos, client_group_);
         EVP_PKEY *public_key = chain::loadPublicKeyFromPEM(getKeyStringFromUUID(the_uuid));
 
         RCLCPP_INFO(node_->get_logger(), " --- Asking robot >>> %s <<< to join the chain", whom_to_ask.c_str());
@@ -244,8 +243,7 @@ class BlockyNode {
             }
             auto who_to_ask = getNameFromUUID(the_uuid);
             EVP_PKEY *public_key = chain::loadPublicKeyFromPEM(getKeyStringFromUUID(the_uuid));
-            target_vote_client_ =
-                node_->create_client<VoteChain>("/" + who_to_ask + "/vote_chain", qos_profile, client_group_);
+            target_vote_client_ = node_->create_client<VoteChain>("/" + who_to_ask + "/vote_chain", qos, client_group_);
             RCLCPP_INFO(node_->get_logger(), " *** Asking robot >>> %s <<< to vote", who_to_ask.c_str());
             auto request = std::make_shared<VoteChain::Request>();
             request->robot_uuid = beacon_.uuid;
@@ -276,7 +274,12 @@ class BlockyNode {
             std::string passphrase_str = chain::vectorToString(decrypted);
             robot_passphrases_.push_back(std::make_pair(the_uuid, passphrase_str));
         }
-        RCLCPP_INFO(node_->get_logger(), " ------------>> With %d votes from %d total members, decision is %s",
+        // add my vote
+        if (vote_policy_) {
+            vote_count.first++;
+            vote_count.second++;
+        }
+        RCLCPP_INFO(node_->get_logger(), "With %d votes [yes] from %d total members, decision is >>>>>> %s <<<<<<<",
                     vote_count.second, vote_count.first, vote_count.second >= vote_count.first ? "YES" : "NO");
         return (vote_count.second >= vote_count.first);
     }
@@ -306,7 +309,7 @@ class BlockyNode {
             auto the_passphrase = robot_passphrases_[i].second;
             std::string whom_to_ask = getNameFromUUID(the_uuid);
             target_update_client_ =
-                node_->create_client<UpdateChain>("/" + whom_to_ask + "/update_chain", qos_profile, client_group_);
+                node_->create_client<UpdateChain>("/" + whom_to_ask + "/update_chain", qos, client_group_);
             RCLCPP_INFO(node_->get_logger(), " *** Asking robot >>> %s <<< to update the chain", whom_to_ask.c_str());
             auto request = std::make_shared<UpdateChain::Request>();
 
