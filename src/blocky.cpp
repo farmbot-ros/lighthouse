@@ -41,6 +41,7 @@ class BlockyNode {
     bool chain_initialized_, in_chain_, got_beacons_, got_beacon_;
 
     rclcpp::CallbackGroup::SharedPtr client_group_, service_group_;
+    rclcpp::QoS qos = rclcpp::QoS(rclcpp::KeepLast(10));
 
     rclcpp::Publisher<farmbot_interfaces::msg::Chain>::SharedPtr chain_pub_;
     rclcpp::Subscription<farmbot_interfaces::msg::Chain>::SharedPtr chain_sub_;
@@ -61,8 +62,6 @@ class BlockyNode {
     using UpdateChain = farmbot_interfaces::srv::UpdateChain;
     rclcpp::Service<UpdateChain>::SharedPtr update_service_;
     rclcpp::Client<UpdateChain>::SharedPtr target_update_client_;
-
-    rclcpp::QoS qos = rclcpp::QoS(rclcpp::KeepLast(10));
 
   public:
     BlockyNode(rclcpp::Node::SharedPtr node) : node_(node) {
@@ -274,12 +273,11 @@ class BlockyNode {
             std::string passphrase_str = chain::vectorToString(decrypted);
             robot_passphrases_.push_back(std::make_pair(the_uuid, passphrase_str));
         }
-        // add my vote
         if (vote_policy_) {
             vote_count.first++;
             vote_count.second++;
         }
-        RCLCPP_INFO(node_->get_logger(), "With %d votes [yes] from %d total members, decision is >>>>>> %s <<<<<<<",
+        RCLCPP_INFO(node_->get_logger(), " ------------>> With %d votes from %d total members, decision is %s",
                     vote_count.second, vote_count.first, vote_count.second >= vote_count.first ? "YES" : "NO");
         return (vote_count.second >= vote_count.first);
     }
