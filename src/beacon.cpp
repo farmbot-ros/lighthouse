@@ -43,7 +43,7 @@ class CapabilitiesNode : public rclcpp::Node {
         }
 
         this->declare_parameter("offline", rclcpp::PARAMETER_INTEGER);
-        timer_to_offline = this->get_parameter_or<int>("offline", 360);
+        timer_to_offline = this->get_parameter_or<int>("offline", 0);
 
         // "beacons/rci" (rci stands for "Robot Capabilitiy Index")
         publisher_ = this->create_publisher<farmbot_interfaces::msg::Agents>("/beacons/rci", 10);
@@ -52,7 +52,9 @@ class CapabilitiesNode : public rclcpp::Node {
         single_beacon_sub = this->create_subscription<farmbot_interfaces::msg::Agent>(
             "beacon/rci", 10, std::bind(&CapabilitiesNode::single_beacon_callback, this, _1));
         timer_ = this->create_wall_timer(10s, std::bind(&CapabilitiesNode::timer_callback, this));
-        offline_timer_ = this->create_wall_timer(1s, std::bind(&CapabilitiesNode::offline_timer_callback, this));
+        if (timer_to_offline > 0) {
+            offline_timer_ = this->create_wall_timer(1s, std::bind(&CapabilitiesNode::offline_timer_callback, this));
+        }
 
         RCLCPP_INFO(this->get_logger(), "BeaconNode started");
     }
