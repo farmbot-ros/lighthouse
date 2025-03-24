@@ -1,3 +1,4 @@
+#include "farmbot_interfaces/msg/agent.hpp"
 #include "farmbot_interfaces/msg/agents.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -43,7 +44,7 @@ class CapabilitiesNode : public rclcpp::Node {
         }
 
         this->declare_parameter("offline", rclcpp::PARAMETER_INTEGER);
-        timer_to_offline = this->get_parameter_or<int>("offline", 0);
+        timer_to_offline = this->get_parameter_or<int>("offline", 60);
 
         // "beacons/rci" (rci stands for "Robot Capabilitiy Index")
         publisher_ = this->create_publisher<farmbot_interfaces::msg::Agents>("/beacons/rci", 10);
@@ -52,11 +53,9 @@ class CapabilitiesNode : public rclcpp::Node {
         single_beacon_sub = this->create_subscription<farmbot_interfaces::msg::Agent>(
             "beacon/rci", 10, std::bind(&CapabilitiesNode::single_beacon_callback, this, _1));
         timer_ = this->create_wall_timer(10s, std::bind(&CapabilitiesNode::timer_callback, this));
-        if (timer_to_offline > 0) {
-            offline_timer_ = this->create_wall_timer(1s, std::bind(&CapabilitiesNode::offline_timer_callback, this));
-        }
+        offline_timer_ = this->create_wall_timer(1s, std::bind(&CapabilitiesNode::offline_timer_callback, this));
 
-        RCLCPP_INFO(this->get_logger(), "BeaconNode started");
+        RCLCPP_INFO(this->get_logger(), "Beacon node started");
     }
 
   private:
@@ -80,12 +79,12 @@ class CapabilitiesNode : public rclcpp::Node {
 
     void offline_timer_callback() {
         auto time_now = this->now();
-        // stored_beacons_.erase(std::remove_if(stored_beacons_.begin(), stored_beacons_.end(),
-        //                                      [&](const farmbot_interfaces::msg::Agent &beacon) {
-        //                                          return (time_now - beacon.timestamp) >
-        //                                                 rclcpp::Duration::from_seconds(timer_to_offline);
-        //                                      }),
-        //                       stored_beacons_.end());
+        stored_beacons_.erase(std::remove_if(stored_beacons_.begin(), stored_beacons_.end(),
+                                             [&](const farmbot_interfaces::msg::Agent &beacon) {
+                                                 return (time_now - beacon.timestamp) >
+                                                        rclcpp::Duration::from_seconds(timer_to_offline);
+                                             }),
+                              stored_beacons_.end());
     }
 
     void single_beacon_callback(const farmbot_interfaces::msg::Agent::SharedPtr msg) {
@@ -102,12 +101,17 @@ class CapabilitiesNode : public rclcpp::Node {
     void all_beacons_callback(const farmbot_interfaces::msg::Agents::SharedPtr msg) {
         // RCLCPP_INFO(this->get_logger(), "Number of beacons %zu", msg->beacons.size());
         for (const auto &m_beacon : msg->beacons) {
-            for (auto &s_beacon : stored_beacons_) {
+            bool found = false;
+            for (auto s_beacon : stored_beacons_) {
                 if (s_beacon.uuid == m_beacon.uuid) {
                     if (m_beacon.timestamp.sec > s_beacon.timestamp.sec) {
-                        s_beacon = m_beacon;
+                        s_beacon.timestamp = m_beacon.timestamp;
                     }
+                    found = true;
+                    break;
                 }
+            }
+            if (!found) {
                 stored_beacons_.push_back(m_beacon);
             }
         }
