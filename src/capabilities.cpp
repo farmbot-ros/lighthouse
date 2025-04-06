@@ -59,12 +59,12 @@ class CapClass {
         farmbot_interfaces::msg::Participant participant;
 
         participant.uuid = my_beacon_uuid_;
-        participant.function = my_beacon_function_;
-        participant.name = namespace_;
+        participant.functions[0] = my_beacon_function_;
         participant.color = my_beacon_color_;
 
         // Initialize this node's own beacon.
         my_beacon_.uuid = my_beacon_uuid_;
+        my_beacon_.name = namespace_;
         my_beacon_.participants.push_back(participant);
         my_beacon_.public_key = my_beacon_pub_key_;
 

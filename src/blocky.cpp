@@ -109,7 +109,7 @@ class BlockyNode {
         if (!chain_initialized_) {
             RCLCPP_INFO(node_->get_logger(), " *** [%s] created GENESIS block and initialized the chain in domain [%s]",
                         namespace_.c_str(), std::to_string(chain_domain_).c_str());
-            chain_ = chain::Chain(std::to_string(chain_domain_), msg->uuid, msg->participants[0].function, crypto_);
+            chain_ = chain::Chain(std::to_string(chain_domain_), msg->uuid, msg->participants[0].functions[0], crypto_);
             chain_initialized_ = true, in_chain_ = true;
         }
         beacon_ = *msg;
@@ -369,7 +369,7 @@ class BlockyNode {
         std::string name;
         for (const auto &beacon : beacons_.agents) {
             if (beacon.uuid == uuid) {
-                name = beacon.participants[0].name;
+                name = beacon.name;
                 break;
             }
         }
