@@ -71,9 +71,9 @@ class CapabilitiesNode : public rclcpp::Node {
                                           [](const farmbot_interfaces::msg::Agent &a,
                                              const farmbot_interfaces::msg::Agent &b) { return a.uuid == b.uuid; }),
                               stored_beacons_.end());
-        msg->beacons = stored_beacons_;
+        msg->agents = stored_beacons_;
         msg->sender = namespace_;
-        msg->num_beacons = stored_beacons_.size();
+        msg->num_agents = stored_beacons_.size();
         publisher_->publish(*msg);
     }
 
@@ -100,7 +100,7 @@ class CapabilitiesNode : public rclcpp::Node {
 
     void all_beacons_callback(const farmbot_interfaces::msg::Agents::SharedPtr msg) {
         // RCLCPP_INFO(this->get_logger(), "Number of beacons %zu", msg->beacons.size());
-        for (const auto &m_beacon : msg->beacons) {
+        for (const auto &m_beacon : msg->agents) {
             bool found = false;
             for (auto s_beacon : stored_beacons_) {
                 if (s_beacon.uuid == m_beacon.uuid) {

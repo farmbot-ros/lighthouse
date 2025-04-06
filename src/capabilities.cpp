@@ -1,5 +1,6 @@
 #include "blocky/signer.hpp"
 #include "farmbot_interfaces/msg/agent.hpp"
+#include "farmbot_interfaces/msg/participant.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 #include <string>
@@ -55,11 +56,16 @@ class CapClass {
         RCLCPP_INFO(node_->get_logger(), "Robots %s private key: \n\n%s", namespace_.c_str(),
                     my_beacon_pub_key_.c_str());
 
+        farmbot_interfaces::msg::Participant participant;
+
+        participant.uuid = my_beacon_uuid_;
+        participant.function = my_beacon_function_;
+        participant.name = namespace_;
+        participant.color = my_beacon_color_;
+
         // Initialize this node's own beacon.
         my_beacon_.uuid = my_beacon_uuid_;
-        my_beacon_.function = my_beacon_function_;
-        my_beacon_.name = namespace_;
-        my_beacon_.color = my_beacon_color_;
+        my_beacon_.participants.push_back(participant);
         my_beacon_.public_key = my_beacon_pub_key_;
 
         RCLCPP_INFO(node_->get_logger(), "ROBOT with UUID: %s", my_beacon_.uuid.c_str());
