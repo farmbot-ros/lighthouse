@@ -1,6 +1,7 @@
 #include "blocky/signer.hpp"
 #include "farmbot_interfaces/msg/agent.hpp"
 #include "farmbot_interfaces/msg/participant.hpp"
+#include "geometry_msgs/msg/point.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 #include <string>
@@ -30,6 +31,7 @@ class CapClass {
     std::string my_beacon_function_;
     std::string my_beacon_color_;
     std::string my_beacon_pub_key_;
+    std::vector<double> my_beacon_zero_ref_;
 
   public:
     CapClass(rclcpp::Node::SharedPtr node) : node_(node) {
@@ -47,9 +49,10 @@ class CapClass {
         my_beacon_function_ = node_->get_parameter_or<std::string>("function", "harvester");
         my_beacon_uuid_ = node_->get_parameter_or<std::string>("uuid", "00000000-0000-0000-0000-000000000000");
         my_beacon_color_ = node_->get_parameter_or<std::string>("color", "#ff0000");
+        my_beacon_zero_ref_ = node_->get_parameter_or<std::vector<double>>("zero_ref", {0.0, 0.0, 0.0});
 
         auto private_key_file_ = node_->get_parameter_or<std::string>("private_key_file", "private_key.pem");
-
+        //
         RCLCPP_INFO(node_->get_logger(), "Private key file: %s", private_key_file_.c_str());
         crypto_ = std::make_shared<chain::Crypto>(private_key_file_);
         my_beacon_pub_key_ = crypto_->getPublicHalf();
@@ -59,8 +62,14 @@ class CapClass {
         farmbot_interfaces::msg::Participant participant;
 
         participant.uuid = my_beacon_uuid_;
-        participant.functions[0] = my_beacon_function_;
+        participant.functions.push_back(my_beacon_function_);
         participant.color = my_beacon_color_;
+
+        geometry_msgs::msg::Point zero_ref;
+        zero_ref.x = my_beacon_zero_ref_[0];
+        zero_ref.y = my_beacon_zero_ref_[1];
+        zero_ref.z = my_beacon_zero_ref_[2];
+        my_beacon_.zero_ref = zero_ref;
 
         // Initialize this node's own beacon.
         my_beacon_.uuid = my_beacon_uuid_;

@@ -18,3 +18,5 @@ capabilities:
         color: "#ff0000"
         uuid: "00000000-0000-0000-0000-000000000000"
         private_key_file: "/doc/code/farmbot/src/lighthouse/config/private_key.pem"
+        # zero_ref: [51.937587, 5.705458, 53.801823]  # Randwijk
+        zero_ref: [51.987305, 5.663625, 53.801823] # Wageningen
