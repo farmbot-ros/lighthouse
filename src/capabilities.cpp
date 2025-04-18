@@ -71,6 +71,9 @@ class CapClass {
         zero_ref.z = my_beacon_zero_ref_[2];
         my_beacon_.zero_ref = zero_ref;
 
+        RCLCPP_INFO(node_->get_logger(), "Robots %s ZERO reference: %f, %f, %f", namespace_.c_str(),
+                    my_beacon_zero_ref_[0], my_beacon_zero_ref_[1], my_beacon_zero_ref_[2]);
+
         // Initialize this node's own beacon.
         my_beacon_.uuid = my_beacon_uuid_;
         my_beacon_.name = namespace_;
