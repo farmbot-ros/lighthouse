@@ -102,12 +102,10 @@ def launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    namespace_arg = DeclareLaunchArgument("namespace", default_value="fbot")
+    namespace_arg = DeclareLaunchArgument("namespace", default_value="robot0")
     function_arg = DeclareLaunchArgument("function", default_value="harvester")
     color_arg = DeclareLaunchArgument("color", default_value="#ff0000")
-    zero_ref_arg = DeclareLaunchArgument(
-        "zero_ref", default_value="[51.937587, 5.705458, 53.801823]"
-    )
+    zero_ref_arg = DeclareLaunchArgument("zero_ref", default_value="")
     uuid_arg = DeclareLaunchArgument("uuid", default_value=str(uuid4()))
     offline_arg = DeclareLaunchArgument("offline", default_value="60s")
     priority_arg = DeclareLaunchArgument("priority", default_value="100")
